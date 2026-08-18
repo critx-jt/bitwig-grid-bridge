@@ -52,6 +52,16 @@ def inspect(client: BridgeClient) -> None:
     emit(client.request("state"))
 
 
+def graph(client: BridgeClient) -> None:
+    """Print live graph capability and state when the device exposes it."""
+    capabilities = client.request("graph-capabilities")
+    emit(capabilities)
+    if capabilities.get("graph_available"):
+        emit(client.request("graph-state"))
+
+
+
+
 def sweep(client: BridgeClient, index: int, minimum: float, maximum: float, steps: int,
           duration: float, keep: bool) -> None:
     if not 1 <= index <= 8:
@@ -95,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("inspect", help="print bridge, container, and remote-control state")
-
+    subparsers.add_parser("graph", help="print graph capabilities and live graph state")
     sweep_parser = subparsers.add_parser("sweep", help="animate one exposed remote control")
     sweep_parser.add_argument("--index", type=int, default=2, help="remote-control index (1-8)")
     sweep_parser.add_argument("--minimum", type=float, default=0.2, help="normalized start value")
@@ -115,6 +125,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     client = BridgeClient()
     if args.command == "inspect":
         inspect(client)
+    elif args.command == "graph":
+        graph(client)
     elif args.command == "sweep":
         sweep(client, args.index, args.minimum, args.maximum, args.steps, args.duration, args.keep)
     elif args.command == "insert-fx-grid":

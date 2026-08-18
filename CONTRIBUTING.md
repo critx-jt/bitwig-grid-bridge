@@ -22,7 +22,7 @@ mvn -f extension/pom.xml package
 Run the focused checks:
 
 ```bash
-uv run pytest tests/test_bridge.py tests/osc/test_controller.py tests/test_tools.py tests/mcp/test_server.py -q
+uv run pytest tests -q
 uv run ruff check bitwig_mcp_server tests/test_bridge.py tests/osc/test_controller.py
 uv run mkdocs build --strict
 mvn -f extension/pom.xml package

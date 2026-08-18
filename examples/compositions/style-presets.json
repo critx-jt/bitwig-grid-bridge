@@ -1,0 +1,46 @@
+{
+  "presets": [
+    {
+      "id": "slow-air",
+      "name": "Slow Air",
+      "principles": ["slow movement", "defined scale", "diffuse space"],
+      "bridge_strategy": "Use a low-intensity glass scaffold; keep motion sparse and leave performance headroom."
+    },
+    {
+      "id": "deep-bed",
+      "name": "Deep Bed",
+      "principles": ["sustained drone", "low density", "background role"],
+      "bridge_strategy": "Use hollow at low intensity; favor a stable bed over foreground events."
+    },
+    {
+      "id": "distant-events",
+      "name": "Distant Events",
+      "principles": ["rare events", "wide space", "long tails"],
+      "bridge_strategy": "Use hollow with conservative contrast; add space through the project template, not guessed graph edits."
+    },
+    {
+      "id": "soft-drift",
+      "name": "Soft Drift",
+      "principles": ["gentle evolution", "low density", "soft contrast"],
+      "bridge_strategy": "Keep the draft quiet and slowly changing; never fill every exposed control."
+    },
+    {
+      "id": "night-motion",
+      "name": "Night Motion",
+      "principles": ["textured motion", "scale-aware movement", "dark atmosphere"],
+      "bridge_strategy": "Use ember as a warm scaffold and keep pitch movement bounded by the user's scale."
+    },
+    {
+      "id": "layered-motion",
+      "name": "Layered Motion",
+      "principles": ["layered diffusion", "controlled artifacts", "persistent motion"],
+      "bridge_strategy": "Use medium intensity and one contrast control at a time; verify after each revision."
+    },
+    {
+      "id": "pulse-lab",
+      "name": "Pulse Lab",
+      "principles": ["bounded variation", "regenerate gesture", "percussive contrast"],
+      "bridge_strategy": "Use acid at higher intensity only on a disposable project; treat generation as a reversible gesture."
+    }
+  ]
+}

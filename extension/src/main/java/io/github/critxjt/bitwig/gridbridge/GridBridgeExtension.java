@@ -4,8 +4,10 @@ import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.ControllerHost;
 import com.bitwig.extension.controller.api.CursorDevice;
 import com.bitwig.extension.controller.api.CursorRemoteControlsPage;
-import com.bitwig.extension.controller.api.CursorTrack;
 import com.bitwig.extension.controller.api.CursorDeviceFollowMode;
+import com.bitwig.extension.controller.api.CursorTrack;
+import com.bitwig.extension.controller.api.TrackBank;
+import com.bitwig.extension.controller.api.Device;
 import com.bitwig.extension.controller.api.Parameter;
 import com.bitwig.extension.controller.api.Action;
 import com.bitwig.extension.controller.api.Application;
@@ -20,6 +22,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -28,10 +31,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Local line-oriented bridge for selected-device and remote-control access.
+ * Local line-oriented bridge for selected-device and Grid document access.
  *
- * The bridge deliberately exposes Bitwig's stable cursor-device/remote-control
- * API, not guessed OSC addresses or Grid graph mutations.
+ * Stable Controller API operations and version-gated private Grid operations
+ * share one host-thread scheduler and Bitwig's native undo history.
  */
 public final class GridBridgeExtension extends ControllerExtension {
     private static final int PORT = 8765;
@@ -43,6 +46,7 @@ public final class GridBridgeExtension extends ControllerExtension {
     private Application application;
     private Project project;
     private CursorTrack cursorTrack;
+    private TrackBank trackBank;
     private ServerSocket serverSocket;
     private ExecutorService clients;
     private Thread acceptThread;
@@ -56,9 +60,22 @@ public final class GridBridgeExtension extends ControllerExtension {
     public void init() {
         cursorTrack = host.createCursorTrack(
                 "BitwigGridBridgeTrack", "Bitwig Grid Bridge cursor", 0, 0, true);
+        trackBank = host.createMainTrackBank(16, 0, 0);
+        for (int i = 0; i < trackBank.getCapacityOfBank(); i++) {
+            trackBank.getItemAt(i).exists().markInterested();
+            trackBank.getItemAt(i).name().markInterested();
+        }
         cursorDevice = cursorTrack.createCursorDevice(
                 "BitwigGridBridgeDevice", "Bitwig Grid Bridge device", 0,
                 CursorDeviceFollowMode.FOLLOW_SELECTION);
+        try {
+            Device primaryDevice = cursorTrack.getPrimaryDevice();
+            if (primaryDevice != null) {
+                cursorDevice.selectDevice(primaryDevice);
+            }
+        } catch (RuntimeException error) {
+            host.println("Bitwig Grid Bridge could not pin the initial device: " + error);
+        }
         application = host.createApplication();
         project = host.getProject();
         application.projectName().markInterested();
@@ -154,7 +171,53 @@ public final class GridBridgeExtension extends ControllerExtension {
                 case "redo" -> { runOnHost(() -> { application.redo(); return null; }); yield "{\"ok\":true}"; }
                 case "capabilities" -> capabilities();
                 case "inspect" -> inspect();
+                case "graph-capabilities" ->
+                        runOnHost(() -> GridGraphAccess.capabilities(cursorDevice));
+                case "graph-state" -> runOnHost(() -> GridGraphAccess.snapshot(cursorDevice));
+                case "graph-clear" -> graphClear();
+                case "graph-modulators" -> graphModulators(parts);
+                case "graph-host-modulators" ->
+                        runOnHost(() -> GridGraphAccess.hostModulators(cursorDevice));
+                case "graph-insert-modulator" -> graphInsertModulator(parts);
+                case "graph-connect-modulator" -> graphConnectModulator(parts);
+                case "graph-set-modulator" -> graphSetModulator(parts);
+                case "graph-catalog" -> graphCatalog(parts);
+                case "graph-insert" -> graphInsert(parts);
+                case "graph-move" -> graphMove(parts);
+                case "graph-set" -> graphSetParameter(parts);
+                case "graph-connect" -> graphConnect(parts);
+                case "graph-disconnect" -> graphDisconnect(parts);
                 case "batch" -> batch(parts);
+                case "tracks" -> tracks();
+                case "track" -> track(parts);
+                case "track-first" -> runOnHost(() -> {
+                    cursorTrack.selectChannel(trackBank.getItemAt(0));
+                    return "{\"ok\":true,\"selection\":\"track-first\"}";
+                });
+                case "track-next" -> runOnHost(() -> {
+                    cursorTrack.selectNext();
+                    return "{\"ok\":true,\"selection\":\"track-next\"}";
+                });
+                case "track-previous" -> runOnHost(() -> {
+                    cursorTrack.selectPrevious();
+                    return "{\"ok\":true,\"selection\":\"track-previous\"}";
+                });
+                case "device-first" -> runOnHost(() -> {
+                    cursorDevice.selectFirst();
+                    return "{\"ok\":true,\"selection\":\"device-first\"}";
+                });
+                case "device-primary" -> runOnHost(() -> {
+                    com.bitwig.extension.controller.api.Device device = cursorTrack.getPrimaryDevice();
+                    if (device == null) {
+                        throw new IllegalStateException("cursor track has no primary device");
+                    }
+                    cursorDevice.selectDevice(device);
+                    return "{\"ok\":true,\"selection\":\"device-primary\"}";
+                });
+                case "device-editor" -> runOnHost(() -> {
+                    cursorDevice.selectInEditor();
+                    return "{\"ok\":true,\"selection\":\"device-editor\"}";
+                });
                 case "next" -> runOnHost(() -> { cursorDevice.selectNext(); return "{\"ok\":true}"; });
                 case "previous" -> runOnHost(() -> { cursorDevice.selectPrevious(); return "{\"ok\":true}"; });
                 case "parent" -> runOnHost(() -> { cursorDevice.selectParent(); return "{\"ok\":true}"; });
@@ -169,12 +232,18 @@ public final class GridBridgeExtension extends ControllerExtension {
         }
     }
     private String capabilities() {
-        return "{\"ok\":true,\"protocol\":2,\"graph_available\":false,"
-                + "\"selected_device\":true,\"remote_controls\":true,"
-                + "\"container_inspection\":true,\"batch_writes\":true,"
-                + "\"host_thread_scheduling\":true,\"application_actions\":true,"
-                + "\"device_insertion\":true,\"undo_redo\":true,"
-                + "\"max_remote_controls\":" + CONTROL_COUNT + "}";
+        return runOnHost(() -> {
+            String graph = GridGraphAccess.capabilities(cursorDevice);
+            boolean graphAvailable = graph.contains("\"graph_available\":true");
+            return "{\"ok\":true,\"protocol\":3,\"graph_available\":"
+                    + graphAvailable
+                    + ",\"selected_device\":true,\"remote_controls\":true"
+                    + ",\"container_inspection\":true,\"batch_writes\":true"
+                    + ",\"host_thread_scheduling\":true,\"application_actions\":true"
+                    + ",\"device_insertion\":true,\"undo_redo\":true"
+                    + ",\"max_remote_controls\":" + CONTROL_COUNT
+                    + ",\"grid_graph\":" + graph + "}";
+        });
     }
 
     private String history() {
@@ -186,6 +255,208 @@ public final class GridBridgeExtension extends ControllerExtension {
                 + ",\"panel_layout\":" + json(application.panelLayout().get())
                 + "}");
     }
+
+    private String tracks() {
+        return runOnHost(() -> {
+            StringBuilder result = new StringBuilder("{\"ok\":true,\"tracks\":[");
+            boolean first = true;
+            for (int i = 0; i < trackBank.getCapacityOfBank(); i++) {
+                var track = trackBank.getItemAt(i);
+                if (!track.exists().get()) {
+                    continue;
+                }
+                if (!first) {
+                    result.append(',');
+                }
+                first = false;
+                result.append("{\"index\":").append(i);
+                result.append(",\"name\":").append(json(track.name().get())).append('}');
+            }
+            return result.append("]}").toString();
+        });
+    }
+
+    private String track(String[] parts) {
+        require(parts, 2);
+        int index = Integer.parseInt(parts[1]);
+        if (index < 0 || index >= trackBank.getCapacityOfBank()) {
+            throw new IllegalArgumentException("track index is outside the main track bank");
+        }
+        return runOnHost(() -> {
+            var selected = trackBank.getItemAt(index);
+            if (!selected.exists().get()) {
+                throw new IllegalArgumentException("track does not exist: " + index);
+            }
+            cursorTrack.selectChannel(selected);
+            return "{\"ok\":true,\"selection\":\"track\",\"index\":" + index
+                    + ",\"name\":" + json(selected.name().get()) + "}";
+        });
+    }
+    private String graphCatalog(String[] parts) {
+        String query = null;
+        if (parts.length > 1) {
+            StringBuilder joined = new StringBuilder(parts[1]);
+            for (int i = 2; i < parts.length; i++) {
+                joined.append(' ').append(parts[i]);
+            }
+            query = joined.toString();
+        }
+        String finalQuery = query;
+        return runOnHost(() -> GridGraphAccess.catalog(finalQuery));
+    }
+    private String graphModulators(String[] parts) {
+        String query = null;
+        if (parts.length > 1) {
+            StringBuilder joined = new StringBuilder(parts[1]);
+            for (int i = 2; i < parts.length; i++) {
+                joined.append(' ').append(parts[i]);
+            }
+            query = joined.toString();
+        }
+        String finalQuery = query;
+        return runOnHost(() -> GridGraphAccess.modulatorCatalog(finalQuery));
+    }
+
+    private String graphInsertModulator(String[] parts) {
+        require(parts, 4);
+        java.util.UUID moduleId;
+        try {
+            moduleId = java.util.UUID.fromString(parts[1]);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("modulator package id must be a UUID", error);
+        }
+        int x = Integer.parseInt(parts[2]);
+        int y = Integer.parseInt(parts[3]);
+        if (Math.abs(x) > 4096 || Math.abs(y) > 4096) {
+            throw new IllegalArgumentException("Grid coordinates must be between -4096 and 4096");
+        }
+        return awaitGraphMutation(
+                "loading the Grid modulator",
+                completion -> GridGraphAccess.insertModulator(
+                        cursorDevice, moduleId, x, y, completion));
+    }
+
+    private String graphConnectModulator(String[] parts) {
+        require(parts, 5);
+        String sourceModule = parts[1];
+        int sourcePort = Integer.parseInt(parts[2]);
+        String targetModule = parts[3];
+        int targetPort = Integer.parseInt(parts[4]);
+        return awaitGraphMutation(
+                "connecting the Grid modulator",
+                completion -> GridGraphAccess.connectModulator(
+                        cursorDevice,
+                        sourceModule,
+                        sourcePort,
+                        targetModule,
+                        targetPort,
+                        completion));
+    }
+    private String graphSetModulator(String[] parts) {
+        require(parts, 4);
+        return awaitGraphMutation(
+                "tuning a Grid modulator",
+                completion -> GridGraphAccess.setModulatorParameter(
+                        cursorDevice, parts[1], parts[2], parts[3], completion));
+    }
+
+    private String graphInsert(String[] parts) {
+        require(parts, 4);
+        java.util.UUID moduleId;
+        try {
+            moduleId = java.util.UUID.fromString(parts[1]);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("module package id must be a UUID", error);
+        }
+        int x = Integer.parseInt(parts[2]);
+        int y = Integer.parseInt(parts[3]);
+        if (Math.abs(x) > 4096 || Math.abs(y) > 4096) {
+            throw new IllegalArgumentException("Grid coordinates must be between -4096 and 4096");
+        }
+        return awaitGraphMutation(
+                "loading the Grid module",
+                completion -> GridGraphAccess.insert(
+                        cursorDevice, moduleId, x, y, completion));
+    }
+
+    private String graphMove(String[] parts) {
+        require(parts, 4);
+        int x = Integer.parseInt(parts[2]);
+        int y = Integer.parseInt(parts[3]);
+        if (Math.abs(x) > 4096 || Math.abs(y) > 4096) {
+            throw new IllegalArgumentException("Grid coordinates must be between -4096 and 4096");
+        }
+        return awaitGraphMutation(
+                "moving a Grid module",
+                completion -> GridGraphAccess.move(cursorDevice, parts[1], x, y, completion));
+    }
+
+    private String graphClear() {
+        return awaitGraphMutation(
+                "clearing the Grid graph",
+                completion -> GridGraphAccess.clear(cursorDevice, completion));
+    }
+
+
+    private String graphSetParameter(String[] parts) {
+        require(parts, 4);
+        return awaitGraphMutation(
+                "setting a Grid parameter",
+                completion -> GridGraphAccess.setParameter(
+                        cursorDevice, parts[1], parts[2], parts[3], completion));
+    }
+
+    private String graphConnect(String[] parts) {
+        require(parts, 5);
+        String sourceModule = parts[1];
+        int sourcePort = Integer.parseInt(parts[2]);
+        String targetModule = parts[3];
+        int targetPort = Integer.parseInt(parts[4]);
+        return awaitGraphMutation(
+                "connecting Grid ports",
+                completion -> GridGraphAccess.connect(
+                        cursorDevice,
+                        sourceModule,
+                        sourcePort,
+                        targetModule,
+                        targetPort,
+                        completion));
+    }
+
+    private String graphDisconnect(String[] parts) {
+        require(parts, 3);
+        String targetModule = parts[1];
+        int targetPort = Integer.parseInt(parts[2]);
+        return awaitGraphMutation(
+                "disconnecting Grid ports",
+                completion -> GridGraphAccess.disconnect(
+                        cursorDevice, targetModule, targetPort, completion));
+    }
+    private String awaitGraphMutation(
+            String description,
+            Consumer<Consumer<String>> start) {
+        AtomicReference<String> response = new AtomicReference<>();
+        CountDownLatch completed = new CountDownLatch(1);
+        runOnHost(() -> {
+            start.accept(value -> {
+                if (response.compareAndSet(null, value)) {
+                    completed.countDown();
+                }
+            });
+            return null;
+        });
+        try {
+            if (!completed.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out " + description);
+            }
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted " + description, error);
+        }
+        return response.get();
+    }
+
+
 
     private String actions(String[] parts) {
         String filter = parts.length > 1 ? parts[1].toLowerCase(Locale.ROOT) : "";
@@ -218,6 +489,7 @@ public final class GridBridgeExtension extends ControllerExtension {
             return "{\"ok\":true,\"action\":" + json(id) + "}";
         });
     }
+
 
     private String insertDevice(String[] parts) {
         require(parts, 3);

@@ -1,0 +1,16 @@
+{
+  "name": "Ember Pulse",
+  "project": "../projects/polygrid-fx-chain/polygrid-fx-chain.bwproject",
+  "brief": "A warm, body-forward pulse that stays expressive under live automation.",
+  "preset": "ember",
+  "intensity": 0.68,
+  "controls": {
+    "Pulse %": 0.58,
+    "PW": 0.42,
+    "Saw %": 0.72,
+    "Tri %": 0.24,
+    "Pitch": 0.46,
+    "Detune": 0.53
+  },
+  "interaction": "Shape the voice before inserting FX Grid; use host undo for the chain operation."
+}

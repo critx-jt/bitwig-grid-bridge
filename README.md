@@ -1,120 +1,114 @@
 # Bitwig Grid Bridge
 
-Bitwig Grid Bridge is a Bitwig Studio controller extension and automation
-toolkit for agents. It exposes a small, deterministic local API for selected
-devices, Grid containers, remote controls, device insertion, application
-actions, and undo/redo.
+Bitwig Grid Bridge is a local Bitwig Studio controller extension with an
+optional Python MCP adapter. It gives agents and scripts a small, inspectable,
+reversible surface for selected devices, exposed controls, and supported Grid
+graph operations.
 
-The repository is intentionally bridge-first. The Python MCP server remains as
-a companion adapter for agent clients; the Bitwig extension is the source of
-truth for host-thread scheduling and live device control.
+**Documentation:** [critx-jt.github.io/bitwig-grid-bridge](https://critx-jt.github.io/bitwig-grid-bridge/)
 
-## Supported automation surface
+## Choose a path
 
-- Inspect the selected device and container slots.
-- Read the eight remote controls exposed by Bitwig.
-- Apply multiple remote-control values in one host-thread batch.
-- Navigate selected devices and parent containers.
-- Insert Bitwig devices by UUID.
-- Invoke allowlisted Bitwig application actions.
-- Inspect project history and use undo/redo.
-- Connect multiple local clients without concurrent Bitwig API access.
+| You want to… | Use |
+| --- | --- |
+| Inspect or automate Bitwig directly | Java extension + [example script](examples/README.md) |
+| Use Claude, Oh My Pi, or another MCP client | Extension + [MCP adapter](docs/installation.md#run-the-mcp-adapter) |
+| Explore Grid sound design with low context switching | [Accessible workflows](docs/accessibility.md) and composition recipes |
 
-The bridge does **not** expose Grid modules, ports, cables, coordinates, or
-arbitrary graph mutation. `graph_available: false` is intentional. Do not
-infer a Grid graph from OSC addresses or edit native `.bwproject`/`.bwpreset`
-binary data in a live project.
+## What is supported
 
-## Requirements
+- Selected-device, track, container, and project-history inspection.
+- Eight exposed remote controls with atomic host-thread writes.
+- Device navigation and allowlisted application actions.
+- Device insertion by UUID with undo/redo.
+- Grid module catalog search, insertion, graph inspection, port connections,
+  parameter writes, and native undo when the live capability response exposes
+  those operations.
+- Semantic Grid modulator search and host-modulator inspection.
+- Preview-first shaping sessions with styles, authored profiles, revisions,
+  explicit mutation authorization, and session undo.
+- Loopback-only local protocol at `127.0.0.1:8765`.
 
-- Bitwig Studio with controller API 21 or newer.
-- Java 21 or newer and Maven.
-- Python 3.10+ and `uv` for the optional MCP adapter.
+The capability response is authoritative. When `graph_available` is false, the
+bridge does not expose graph topology; it must not be inferred from OSC,
+coordinates, UI pixels, or native project bytes.
 
-## Install the Bitwig extension
+## Quickstart
+
+### Prerequisites
+
+- Bitwig Studio with Controller API 21 or newer.
+- Java 21 and Maven.
+- Python 3.10 or newer and `uv` for the optional MCP adapter.
+
+### Build and install the extension
 
 ```bash
-git clone https://github.com/critx-jt/bitwig-grid-bridge.git
-cd bitwig-grid-bridge
-
 mvn -f extension/pom.xml package
+mkdir -p "$HOME/Bitwig Studio/Extensions"
 cp extension/target/bitwig-grid-bridge-0.1.0.jar \
   "$HOME/Bitwig Studio/Extensions/BitwigGridBridge.bwextension"
 ```
 
-Restart Bitwig, then enable **Bitwig Grid Bridge** under
-**Settings > Controllers**. The extension listens only on
-`127.0.0.1:8765`; it does not claim MIDI ports or external hardware.
+Restart Bitwig. Open **Settings → Controllers**, add **Bitwig Grid Bridge**, and
+enable it.
 
-## Run the optional MCP adapter
+### Verify the extension
 
-The existing Python adapter translates MCP calls to the bridge and retains OSC
-fallback support for controls that are not bridge-backed.
-
-```bash
-uv sync
-BITWIG_MCP_GRID_BRIDGE_ENABLED=true python -m bitwig_mcp_server
-```
-
-The default bridge settings are:
-
-```text
-BITWIG_MCP_GRID_BRIDGE_HOST=127.0.0.1
-BITWIG_MCP_GRID_BRIDGE_PORT=8765
-```
-
-## Showcase projects
-
-The checked-in projects under [`examples/`](examples/) are disposable Bitwig
-fixtures:
-
-- `polygrid-remote-controls` demonstrates selected Poly Grid inspection and
-  reversible remote-control sweeps.
-- `polygrid-fx-chain` demonstrates deterministic FX Grid insertion and undo.
-
-Open one project in Bitwig, enable the extension, then run:
+Open a disposable project from `examples/projects/`, select its Poly Grid, and
+run:
 
 ```bash
 python examples/automation/grid_bridge_demo.py inspect
-python examples/automation/grid_bridge_demo.py sweep --index 2 --duration 4
-python examples/automation/grid_bridge_demo.py insert-fx-grid --position after
+python examples/automation/grid_bridge_demo.py graph
 ```
 
-The sweep restores the original value by default. Device insertion is also
-undone by default; pass `--keep` to commit either operation. Use the copied
-example projects rather than an active music project.
+The second command is read-only and prints graph state only when the selected
+device exposes it.
 
-## Repository layout
+### Run the MCP adapter
 
-```text
-extension/                 Bitwig controller extension and local protocol
-examples/                  Disposable Bitwig projects and automation demos
-bitwig_mcp_server/         Optional MCP/OSC adapter and bridge client
-tests/                     Python adapter and protocol regression tests
-docs/                      Architecture and installation notes
+```bash
+uv sync
+BITWIG_MCP_GRID_BRIDGE_ENABLED=true uv run python -m bitwig_mcp_server
 ```
+
+The adapter uses MCP stdio and keeps stdout reserved for protocol messages. An
+MCP client configuration is documented in [Installation](docs/installation.md).
+
+## Safe operating rule
+
+Read capabilities and current state, preview when possible, mutate one thing
+with explicit confirmation, then verify. Use a disposable project while
+learning. Stop after the first error instead of retrying a mutation blindly.
+
+For detailed procedures:
+
+- [Quickstart](docs/quickstart.md)
+- [Installation and troubleshooting](docs/installation.md)
+- [Preview-first and graph workflows](docs/workflows.md)
+- [Models and capability boundaries](docs/models.md)
+- [Tool and recovery cheat sheet](docs/cheatsheet.md)
+- [Accessible use](docs/accessibility.md)
+
+## Examples
+
+The [examples](examples/README.md) directory contains two disposable Bitwig
+projects, a dependency-free bridge client, and JSON composition recipes.
+`inspect`, `graph`, and reversible `sweep`/`insert-fx-grid` commands demonstrate
+the supported local protocol without requiring an agent.
 
 ## Development
 
 ```bash
-# Build the extension
+uv sync
+make check
+make test
 mvn -f extension/pom.xml package
-
-# Run focused Python checks
-uv run pytest tests/test_bridge.py tests/osc/test_controller.py -q
-uv run ruff check bitwig_mcp_server tests/test_bridge.py tests/osc/test_controller.py
-
-# Build documentation
-uv run mkdocs build --strict
 ```
 
-## Design boundary
+`make check` runs the strict MkDocs build, Ruff, and the extension package build.
+`make test` runs the focused Python regression suite. Integration tests that
+need a live Bitwig session are separate.
 
-For cooperative agents, allow concurrent reads but serialize mutations through
-one per-project writer. Add selected-device identity, expected-state revisions,
-idempotency keys, dry-run responses, and explicit undo boundaries before
-exposing more mutation commands.
-
-Arbitrary Grid graph generation requires a supported Bitwig graph API or a
-separate, version-gated serializer validated against disposable project
-copies. Until then, use trusted example projects and preset/template workflows.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for scope, safety, and review rules.

@@ -1,5 +1,5 @@
 """
-Tests for the Bitwig MCP Server settings module.
+Tests for the Bitwig Grid Bridge settings module.
 """
 
 import logging
@@ -18,8 +18,8 @@ def test_settings_defaults():
     settings = Settings()
 
     # Check default values
-    assert settings.app_name == "bitwig-mcp-server"
-    assert settings.app_tagline == "MCP server for Bitwig Studio."
+    assert settings.app_name == "bitwig-grid-bridge"
+    assert settings.app_tagline == "MCP adapter for the Bitwig Grid Bridge."
     assert settings.log_level == "INFO"
     assert settings.bitwig_host == "127.0.0.1"
     assert settings.bitwig_send_port == 8000

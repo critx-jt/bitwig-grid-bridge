@@ -32,7 +32,7 @@ class BitwigMCPServer:
         self.settings = settings or Settings()
 
         # Create the MCP server
-        self.mcp_server = MCPServer(f"bitwig-mcp-server-{self.settings.app_name}")
+        self.mcp_server = MCPServer(f"bitwig-grid-bridge-{self.settings.app_name}")
 
         self.controller = BitwigOSCController(
             self.settings.bitwig_host,
@@ -50,8 +50,6 @@ class BitwigMCPServer:
         """Set up MCP server handlers"""
         self.mcp_server.list_tools()(self.list_tools)
         self.mcp_server.call_tool()(self.call_tool)
-        self.mcp_server.list_resources()(self.list_resources)
-        self.mcp_server.read_resource()(self.read_resource)
 
     async def start(self) -> None:
         """Start the Bitwig MCP server"""
@@ -70,9 +68,9 @@ class BitwigMCPServer:
                 logger.error("Bitwig OSC controller failed to become ready in time")
                 raise RuntimeError("Bitwig OSC controller failed to initialize")
 
-            logger.info(f"Bitwig MCP Server started - hosting {self.settings.app_name}")
+            logger.info(f"Bitwig Grid Bridge MCP started - hosting {self.settings.app_name}")
         except Exception as e:
-            logger.exception(f"Failed to start Bitwig MCP Server: {e}")
+            logger.exception(f"Failed to start Bitwig Grid Bridge MCP: {e}")
             await self.stop()
             raise
 
@@ -81,9 +79,9 @@ class BitwigMCPServer:
         try:
             if hasattr(self, "controller"):
                 self.controller.stop()
-            logger.info("Bitwig MCP Server stopped")
+            logger.info("Bitwig Grid Bridge MCP stopped")
         except Exception as e:
-            logger.exception(f"Error while stopping Bitwig MCP Server: {e}")
+            logger.exception(f"Error while stopping Bitwig Grid Bridge MCP: {e}")
 
     async def list_tools(self) -> List[Any]:
         """List available Bitwig tools"""
@@ -114,31 +112,6 @@ class BitwigMCPServer:
             logger.exception(f"Error calling tool {name}: {e}")
             return [TextContent(type="text", text=f"Error: {e!s}")]
 
-    async def list_resources(self) -> List[Any]:
-        """List available Bitwig resources"""
-        from bitwig_mcp_server.mcp.resources import get_bitwig_resources
-
-        return get_bitwig_resources()
-
-    async def read_resource(self, uri: str) -> str:
-        """Read a Bitwig resource
-
-        Args:
-            uri: Resource URI to read
-
-        Returns:
-            Content of the resource
-
-        Raises:
-            ValueError: If resource URI is unknown
-        """
-        try:
-            from bitwig_mcp_server.mcp.resources import read_resource
-
-            return await read_resource(self.controller, uri)
-        except Exception as e:
-            logger.exception(f"Error reading resource {uri}: {e}")
-            raise ValueError(f"Failed to read resource {uri}: {e}")
 
 
 async def run_server(settings: Optional[Settings] = None) -> None:

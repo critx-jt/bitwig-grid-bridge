@@ -37,36 +37,34 @@ def test_get_bitwig_tools():
         "save_parameter_snapshot",
         "compare_parameter_snapshots",
         "apply_parameter_snapshot",
-
+        "grid_list_style_presets",
+        "grid_list_soundscape_styles",
+        "grid_soundscape_plan",
+        "get_grid_host_modulators",
+        "grid_shape_start",
+        "grid_shape_compose",
+        "grid_shape_status",
+        "grid_shape_apply",
+        "grid_shape_undo",
+        "grid_insert_device",
+        "grid_insert_module",
+        "grid_insert_modulator",
+        "grid_set_modulator_parameter",
+        "grid_set_module_parameter",
+        "grid_connect_modules",
+        "grid_connect_modulator",
+        "grid_disconnect_module",
+        "get_grid_graph",
+        "search_grid_modules",
+        "search_grid_modulators",
+        "grid_project_undo",
+        "grid_project_redo",
+        "grid_navigate_device",
+        "grid_list_tracks",
+        "grid_select_track",
     }
-
-    # Check that we have browser-related tools
-    expected_browser_names = {
-        # Basic browser tools
-        "browse_insert_device",
-        "browse_device_presets",
-        "commit_browser_selection",
-        "cancel_browser",
-        "navigate_browser_tab",
-        "navigate_browser_filter",
-        "reset_browser_filter",
-        "navigate_browser_result",
-        # Browser workflow tools
-        "device_browser_workflow",
-        "preset_browser_workflow",
-        # Browser content tools
-        "search_device_browser",
-        "recommend_devices",
-        "get_device_categories",
-        "get_device_info",
-    }
-
-    # Verify that all expected tools are present
     for tool_name in expected_core_names:
         assert tool_name in tool_names, f"Missing core tool: {tool_name}"
-
-    for tool_name in expected_browser_names:
-        assert tool_name in tool_names, f"Missing browser tool: {tool_name}"
 
     # Check schema structure
     for tool in tools:
@@ -74,6 +72,7 @@ def test_get_bitwig_tools():
         assert isinstance(tool.inputSchema, dict)
         assert "type" in tool.inputSchema
         assert tool.inputSchema["type"] == "object"
+
 
 @pytest.mark.asyncio
 async def test_execute_tool_set_selected_device_parameters():
@@ -361,311 +360,221 @@ async def test_execute_tool_toggle_device_window():
     assert result[0].text == "Device window toggled"
 
 
-# Browser tool tests
-
-
 @pytest.mark.asyncio
-async def test_execute_tool_browse_insert_device():
-    """Test execute_tool with browse_insert_device tool."""
-    # Create a mock controller
+async def test_execute_tool_grid_shape_style_preview():
     controller = MagicMock()
-    controller.client.browse_for_device = MagicMock()
+    controller.get_selected_device_state.return_value = {
+        "available": True,
+        "properties": {"name": "Poly Grid"},
+        "parameters": [
+            {"index": 2, "name": "PW", "exists": True, "value": 64.0},
+        ],
+    }
 
-    # Test with default position ("after")
-    result = await execute_tool(controller, "browse_insert_device", {})
-    controller.client.browse_for_device.assert_called_with("after")
-    assert "Browser opened to insert device after" in result[0].text
-
-    # Test with explicit position
-    controller.client.browse_for_device.reset_mock()
-    result = await execute_tool(
-        controller, "browse_insert_device", {"position": "before"}
-    )
-    controller.client.browse_for_device.assert_called_with("before")
-    assert "Browser opened to insert device before" in result[0].text
-
-    # Test with invalid position - error is caught and returned as a text result
-    result = await execute_tool(
-        controller, "browse_insert_device", {"position": "invalid"}
-    )
-    assert "Error" in result[0].text
-    assert "Invalid position" in result[0].text
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_browse_device_presets():
-    """Test execute_tool with browse_device_presets tool."""
-    # Create a mock controller
-    controller = MagicMock()
-    controller.client.browse_for_preset = MagicMock()
-
-    # Execute the tool
-    result = await execute_tool(controller, "browse_device_presets", {})
-
-    # Check that the controller method was called
-    controller.client.browse_for_preset.assert_called_once()
-
-    # Check the result
-    assert "Browser opened to browse device presets" in result[0].text
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_browser_operations():
-    """Test execute_tool with browser operation tools."""
-    # Create a mock controller
-    controller = MagicMock()
-
-    # Test commit_browser_selection
-    controller.client.commit_browser_selection = MagicMock()
-    result = await execute_tool(controller, "commit_browser_selection", {})
-    controller.client.commit_browser_selection.assert_called_once()
-    assert "Browser selection committed" in result[0].text
-
-    # Test cancel_browser
-    controller.client.cancel_browser = MagicMock()
-    result = await execute_tool(controller, "cancel_browser", {})
-    controller.client.cancel_browser.assert_called_once()
-    assert "Browser session canceled" in result[0].text
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_navigate_browser_tab():
-    """Test execute_tool with navigate_browser_tab tool."""
-    # Create a mock controller
-    controller = MagicMock()
-    controller.client.navigate_browser_tab = MagicMock()
-
-    # Test navigate next
-    result = await execute_tool(
-        controller, "navigate_browser_tab", {"direction": "next"}
-    )
-    controller.client.navigate_browser_tab.assert_called_with("+")
-    assert "Navigated to next browser tab" in result[0].text
-
-    # Test navigate previous
-    controller.client.navigate_browser_tab.reset_mock()
-    result = await execute_tool(
-        controller, "navigate_browser_tab", {"direction": "previous"}
-    )
-    controller.client.navigate_browser_tab.assert_called_with("-")
-    assert "Navigated to previous browser tab" in result[0].text
-
-    # Test missing direction
-    result = await execute_tool(controller, "navigate_browser_tab", {})
-    assert "Error" in result[0].text
-    assert "Missing required argument" in result[0].text
-
-    # Test invalid direction
-    result = await execute_tool(
-        controller, "navigate_browser_tab", {"direction": "invalid"}
-    )
-    assert "Error" in result[0].text
-    assert "Invalid direction" in result[0].text
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_navigate_browser_filter():
-    """Test execute_tool with navigate_browser_filter tool."""
-    # Create a mock controller
-    controller = MagicMock()
-    controller.client.navigate_browser_filter = MagicMock()
-
-    # Test navigate next
-    result = await execute_tool(
-        controller, "navigate_browser_filter", {"filter_index": 1, "direction": "next"}
-    )
-    controller.client.navigate_browser_filter.assert_called_with(1, "+")
-    assert "Navigated to next option in filter 1" in result[0].text
-
-    # Test navigate previous
-    controller.client.navigate_browser_filter.reset_mock()
     result = await execute_tool(
         controller,
-        "navigate_browser_filter",
-        {"filter_index": 2, "direction": "previous"},
+        "grid_shape_start",
+        {"brief": "slow evolving air", "style": "slow-air"},
     )
-    controller.client.navigate_browser_filter.assert_called_with(2, "-")
-    assert "Navigated to previous option in filter 2" in result[0].text
 
-    # Test missing arguments
-    result = await execute_tool(controller, "navigate_browser_filter", {})
-    assert "Error" in result[0].text
-    assert "Missing required arguments" in result[0].text
+    assert "slow-air" in result[0].text
+    assert "mutates" in result[0].text
+    assert controller.set_selected_device_parameters.call_count == 0
 
-    # Test invalid filter_index
-    result = await execute_tool(
-        controller, "navigate_browser_filter", {"filter_index": 0, "direction": "next"}
-    )
-    assert "Error" in result[0].text
-    assert "Invalid filter_index" in result[0].text
 
-    # Test invalid direction
+@pytest.mark.asyncio
+async def test_execute_tool_lists_style_presets():
+    result = await execute_tool(MagicMock(), "grid_list_style_presets", {})
+
+    assert "slow-air" in result[0].text
+    assert "percussive contrast" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_grid_graph_reads_and_module_write():
+    controller = MagicMock()
+    controller.get_grid_graph.return_value = {"ok": True, "modules": {"count": 0}}
+    controller.grid_set_module_parameter.return_value = {"ok": True, "changed": True}
+
+    graph = await execute_tool(controller, "get_grid_graph", {})
+    assert '"modules"' in graph[0].text
+    controller.get_grid_graph.assert_called_once_with()
+
     result = await execute_tool(
         controller,
-        "navigate_browser_filter",
-        {"filter_index": 1, "direction": "invalid"},
-    )
-    assert "Error" in result[0].text
-    assert "Invalid direction" in result[0].text
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_reset_browser_filter():
-    """Test execute_tool with reset_browser_filter tool."""
-    # Create a mock controller
-    controller = MagicMock()
-    controller.client.reset_browser_filter = MagicMock()
-
-    # Test reset filter
-    result = await execute_tool(controller, "reset_browser_filter", {"filter_index": 1})
-    controller.client.reset_browser_filter.assert_called_with(1)
-    assert "Reset filter 1" in result[0].text
-
-    # Test missing filter_index
-    result = await execute_tool(controller, "reset_browser_filter", {})
-    assert "Error" in result[0].text
-    assert "Missing required argument" in result[0].text
-
-    # Test invalid filter_index
-    result = await execute_tool(controller, "reset_browser_filter", {"filter_index": 0})
-    assert "Error" in result[0].text
-    assert "Invalid filter_index" in result[0].text
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_navigate_browser_result():
-    """Test execute_tool with navigate_browser_result tool."""
-    # Create a mock controller
-    controller = MagicMock()
-    controller.client.navigate_browser_result = MagicMock()
-
-    # Test navigate next
-    result = await execute_tool(
-        controller, "navigate_browser_result", {"direction": "next"}
-    )
-    controller.client.navigate_browser_result.assert_called_with("+")
-    assert "Navigated to next browser result" in result[0].text
-
-    # Test navigate previous
-    controller.client.navigate_browser_result.reset_mock()
-    result = await execute_tool(
-        controller, "navigate_browser_result", {"direction": "previous"}
-    )
-    controller.client.navigate_browser_result.assert_called_with("-")
-    assert "Navigated to previous browser result" in result[0].text
-
-    # Test missing direction
-    result = await execute_tool(controller, "navigate_browser_result", {})
-    assert "Error" in result[0].text
-    assert "Missing required argument" in result[0].text
-
-    # Test invalid direction
-    result = await execute_tool(
-        controller, "navigate_browser_result", {"direction": "invalid"}
-    )
-    assert "Error" in result[0].text
-    assert "Invalid direction" in result[0].text
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_device_browser_workflow():
-    """Test execute_tool with device_browser_workflow tool."""
-    # Create a mock controller
-    controller = MagicMock()
-    controller.client.browse_for_device = MagicMock()
-    controller.client.navigate_browser_tab = MagicMock()
-    controller.client.navigate_browser_filter = MagicMock()
-    controller.client.navigate_browser_result = MagicMock()
-    controller.client.commit_browser_selection = MagicMock()
-
-    # Test with basic parameters
-    result = await execute_tool(
-        controller,
-        "device_browser_workflow",
+        "grid_set_module_parameter",
         {
-            "position": "after",
-            "num_tab_navigations": 2,
-            "filter_navigations": [
-                {"filter_index": 1, "steps": 3},
-                {"filter_index": 2, "steps": -1},
-            ],
-            "result_navigations": 4,
+            "module_id": "2",
+            "parameter_id": "TIMBRE",
+            "value": 0.25,
+            "confirm": True,
+        },
+    )
+    assert '"changed": true' in result[0].text
+    controller.grid_set_module_parameter.assert_called_once_with("2", "TIMBRE", 0.25)
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_grid_mutations_require_confirmation():
+    controller = MagicMock()
+    result = await execute_tool(
+        controller,
+        "grid_connect_modules",
+        {
+            "source_module_id": "2",
+            "source_port": 0,
+            "target_module_id": "1",
+            "target_port": 0,
+            "confirm": False,
+        },
+    )
+    assert "confirm must be true" in result[0].text
+    controller.grid_connect_modules.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_allows_cooperative_grid_mutation():
+    controller = MagicMock()
+    controller.grid_connect_modules.return_value = {"ok": True, "changed": True}
+    result = await execute_tool(
+        controller,
+        "grid_connect_modules",
+        {
+            "source_module_id": "2",
+            "source_port": 0,
+            "target_module_id": "1",
+            "target_port": 0,
+            "cooperative": True,
+        },
+    )
+    assert '"changed": true' in result[0].text
+    controller.grid_connect_modules.assert_called_once_with("2", 0, "1", 0)
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_modulator_catalog_and_mutations():
+    controller = MagicMock()
+    controller.search_grid_modulators.return_value = {
+        "ok": True,
+        "modulators": [{"name": "LFO", "category": "lfo"}],
+    }
+    controller.grid_insert_modulator.return_value = {"ok": True, "operation": "insert"}
+    controller.grid_connect_modulator.return_value = {
+        "ok": True,
+        "operation": "connect",
+    }
+    controller.grid_set_modulator_parameter.return_value = {
+        "ok": True,
+        "operation": "set_parameter",
+    }
+
+    catalog = await execute_tool(
+        controller,
+        "search_grid_modulators",
+        {"query": "lfo"},
+    )
+    assert '"LFO"' in catalog[0].text
+    controller.search_grid_modulators.assert_called_once_with("lfo")
+
+    inserted = await execute_tool(
+        controller,
+        "grid_insert_modulator",
+        {"package_id": "uuid", "x": 2, "y": 3, "confirm": True},
+    )
+    assert '"insert"' in inserted[0].text
+    controller.grid_insert_modulator.assert_called_once_with("uuid", 2, 3)
+
+    connected = await execute_tool(
+        controller,
+        "grid_connect_modulator",
+        {
+            "source_module_id": "2",
+            "source_port": 0,
+            "target_module_id": "1",
+            "target_port": 0,
+            "cooperative": True,
+        },
+    )
+    assert '"connect"' in connected[0].text
+    controller.grid_connect_modulator.assert_called_once_with("2", 0, "1", 0)
+    tuned = await execute_tool(
+        controller,
+        "grid_set_modulator_parameter",
+        {
+            "module_id": "2",
+            "parameter_id": "RATE",
+            "value": -0.25,
+            "confirm": True,
+        },
+    )
+    assert '"set_parameter"' in tuned[0].text
+    controller.grid_set_modulator_parameter.assert_called_once_with("2", "RATE", -0.25)
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_soundscape_plan_is_non_mutating():
+    controller = MagicMock()
+
+    result = await execute_tool(
+        controller,
+        "grid_soundscape_plan",
+        {
+            "brief": "A sparse rainy night with distant tonal events",
+            "density": 0.2,
+            "motion": 0.4,
         },
     )
 
-    # Check that all required methods were called
-    controller.client.browse_for_device.assert_called_with("after")
-    assert controller.client.navigate_browser_tab.call_count == 2
-    assert controller.client.navigate_browser_filter.call_count == 4  # 3 + 1
-    assert controller.client.navigate_browser_result.call_count == 4
-    controller.client.commit_browser_selection.assert_called_once()
-
-    # Check the result
-    assert "Device browser workflow completed successfully" in result[0].text
-
-    # Test with invalid parameters
-    result = await execute_tool(
-        controller, "device_browser_workflow", {"position": "invalid"}
-    )
-    assert "Error" in result[0].text
-    assert "Invalid position" in result[0].text
-
-    result = await execute_tool(
-        controller, "device_browser_workflow", {"num_tab_navigations": "invalid"}
-    )
-    assert "Error" in result[0].text
-    assert "Invalid num_tab_navigations" in result[0].text
-
-    result = await execute_tool(
-        controller,
-        "device_browser_workflow",
-        {
-            "filter_navigations": [
-                {"filter_index": 0, "steps": 1}  # Invalid filter index
-            ]
-        },
-    )
-    assert "Error" in result[0].text
-    assert "Invalid filter_index" in result[0].text
-
-    result = await execute_tool(
-        controller,
-        "device_browser_workflow",
-        {
-            "filter_navigations": [
-                {"filter_index": 1, "steps": "invalid"}  # Invalid steps
-            ]
-        },
-    )
-    assert "Error" in result[0].text
-    assert "Invalid steps" in result[0].text
+    assert '"style": "weather-texture"' in result[0].text
+    assert '"mutates"' not in result[0].text
+    controller.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_preset_browser_workflow():
-    """Test execute_tool with preset_browser_workflow tool."""
-    # Create a mock controller
+async def test_execute_tool_host_modulator_inspection():
     controller = MagicMock()
-    controller.client.browse_for_preset = MagicMock()
-    controller.client.navigate_browser_filter = MagicMock()
-    controller.client.navigate_browser_result = MagicMock()
-    controller.client.commit_browser_selection = MagicMock()
+    controller.get_grid_host_modulators.return_value = {
+        "available": True,
+        "sources": [{"source_index": 0, "name": "Random", "mapped": False}],
+    }
 
-    # Test with basic parameters
-    result = await execute_tool(
-        controller,
-        "preset_browser_workflow",
-        {
-            "filter_navigations": [{"filter_index": 1, "steps": 2}],
-            "result_navigations": 3,
-        },
+    result = await execute_tool(controller, "get_grid_host_modulators", {})
+
+    assert '"Random"' in result[0].text
+    controller.get_grid_host_modulators.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_lists_and_selects_grid_track():
+    controller = MagicMock()
+    controller.grid_tracks.return_value = {
+        "ok": True,
+        "tracks": [{"index": 2, "name": "Poly Grid"}],
+    }
+    controller.grid_select_track.return_value = {
+        "ok": True,
+        "selection": "track",
+        "index": 2,
+    }
+
+    tracks = await execute_tool(controller, "grid_list_tracks", {})
+    selected = await execute_tool(
+        controller, "grid_select_track", {"track_index": 2}
     )
 
-    # Check that all required methods were called
-    controller.client.browse_for_preset.assert_called_once()
-    assert controller.client.navigate_browser_filter.call_count == 2
-    assert controller.client.navigate_browser_result.call_count == 3
-    controller.client.commit_browser_selection.assert_called_once()
+    assert '"Poly Grid"' in tracks[0].text
+    assert '"index": 2' in selected[0].text
+    controller.grid_tracks.assert_called_once_with()
+    controller.grid_select_track.assert_called_once_with(2)
 
-    # Check the result
-    assert "Preset browser workflow completed successfully" in result[0].text
+
+@pytest.mark.asyncio
+async def test_execute_tool_rejects_invalid_grid_track_index():
+    controller = MagicMock()
+
+    result = await execute_tool(
+        controller, "grid_select_track", {"track_index": True}
+    )
+
+    assert "track_index must be an integer between 0 and 15" in result[0].text
+    controller.grid_select_track.assert_not_called()

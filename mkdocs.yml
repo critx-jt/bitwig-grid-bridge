@@ -1,54 +1,82 @@
 site_name: Bitwig Grid Bridge
 repo_url: https://github.com/critx-jt/bitwig-grid-bridge
 site_url: https://critx-jt.github.io/bitwig-grid-bridge
-site_description: Bitwig Studio bridge extension and Grid automation toolkit.
+site_description: Local Bitwig Studio bridge extension and inspectable Grid automation toolkit.
 site_author: critx-jt
 edit_uri: edit/main/docs/
 repo_name: critx-jt/bitwig-grid-bridge
 copyright: Maintained by <a href="https://github.com/critx-jt">critx-jt</a>.
 
+docs_dir: docs
 nav:
   - Home: index.md
+  - Quickstart: quickstart.md
   - Installation: installation.md
+  - Workflows: workflows.md
+  - Models and boundaries: models.md
+  - Cheat sheet: cheatsheet.md
+  - Accessible use: accessibility.md
   - Architecture: architecture.md
-  - Modules: modules.md
+  - Grid:
+      - Live device inventory: grid-device-inventory.md
+      - Modulator catalog: grid-modulator-catalog.md
+      - Module notes: modules.md
 plugins:
-  - search
+  - search:
+      lang: en
   - mkdocstrings:
       handlers:
         python:
           paths: [bitwig_mcp_server]
 theme:
   name: material
-  feature:
-    tabs: true
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: white
+      primary: indigo
       accent: deep orange
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: black
-      accent: deep orange
+      primary: indigo
+      accent: orange
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   icon:
     repo: fontawesome/brands/github
-
+extra_css:
+  - stylesheets/extra.css
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/critx-jt/bitwig-grid-bridge
-    - icon: fontawesome/brands/python
-      link: https://pypi.org/project/bitwig-mcp-server
 
 markdown_extensions:
-  - toc:
-      permalink: true
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences
   - pymdownx.arithmatex:
       generic: true
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3

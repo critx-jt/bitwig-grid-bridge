@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/config/mcp-schema.json",
+  "mcpServers": {
+    "bitwig-grid-bridge": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--project", ".", "python", "-m", "bitwig_mcp_server"],
+      "cwd": ".",
+      "env": {
+        "BITWIG_MCP_GRID_BRIDGE_ENABLED": "true",
+        "BITWIG_MCP_LOG_LEVEL": "WARNING"
+      },
+      "timeout": 120000
+    }
+  }
+}

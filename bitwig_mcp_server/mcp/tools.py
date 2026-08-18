@@ -6,17 +6,20 @@ This module provides MCP tools for controlling Bitwig Studio.
 
 import json
 import logging
-import os
-from pathlib import Path
+import math
 from typing import Any, Dict, List
 
 from mcp.types import TextContent, Tool
 
 from bitwig_mcp_server.osc.controller import BitwigOSCController
-from bitwig_mcp_server.utils.device_recommender import BitwigDeviceRecommender
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+
+def _mutation_is_authorized(arguments: Dict[str, Any]) -> bool:
+    """Allow explicit confirmation or prompt/skill-authorized cooperation."""
+    return arguments.get("confirm") is True or arguments.get("cooperative") is True
 
 
 def get_bitwig_tools() -> List[Tool]:
@@ -26,83 +29,6 @@ def get_bitwig_tools() -> List[Tool]:
         List of Tool objects
     """
     return [
-        # Browser content discovery tools
-        Tool(
-            name="search_device_browser",
-            description="Search for devices in the Bitwig browser using semantic search",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query (e.g., 'delay with filtering')",
-                    },
-                    "num_results": {
-                        "type": "integer",
-                        "description": "Number of results to return",
-                        "default": 5,
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "Filter by device category",
-                    },
-                    "type": {
-                        "type": "string",
-                        "description": "Filter by device type",
-                    },
-                    "creator": {
-                        "type": "string",
-                        "description": "Filter by device creator",
-                    },
-                },
-                "required": ["query"],
-            },
-        ),
-        Tool(
-            name="recommend_devices",
-            description="Recommend devices based on a natural language description of the desired sound or effect",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "description": {
-                        "type": "string",
-                        "description": "Description of the desired sound or effect (e.g., 'make the bass sound fatter and warmer')",
-                    },
-                    "num_results": {
-                        "type": "integer",
-                        "description": "Number of results to return",
-                        "default": 5,
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "Filter by device category",
-                    },
-                },
-                "required": ["description"],
-            },
-        ),
-        Tool(
-            name="get_device_categories",
-            description="Get a list of all device categories",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="get_device_info",
-            description="Get detailed information about a specific device",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "device_name": {
-                        "type": "string",
-                        "description": "Name of the device to get information about",
-                    },
-                },
-                "required": ["device_name"],
-            },
-        ),
         Tool(
             name="transport_play",
             description="Toggle play/pause state of Bitwig",
@@ -178,8 +104,8 @@ def get_bitwig_tools() -> List[Tool]:
         Tool(
             name="get_selected_device_state",
             description=(
-                "Read the currently selected device and its observable parameters. "
-                "This exposes parameter control only; Grid module topology is unavailable."
+                "Read the currently selected device, including Grid graph topology "
+                "and editable module parameters when the Grid bridge is available."
             ),
             inputSchema={"type": "object", "properties": {}},
         ),
@@ -190,6 +116,416 @@ def get_bitwig_tools() -> List[Tool]:
                 "Use this before attempting automated Grid reconstruction."
             ),
             inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="get_grid_graph",
+            description=(
+                "Read the selected Grid's module instances, ports, connections, "
+                "coordinates, and editable module parameters."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="search_grid_modules",
+            description="Search installed Bitwig Grid modules by name or package UUID.",
+            inputSchema={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+            },
+        ),
+        Tool(
+            name="search_grid_modulators",
+            description=(
+                "Search the installed Grid modulation catalog. Results include "
+                "semantic roles, input/output hints, and tuning parameters."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+            },
+        ),
+        Tool(
+            name="grid_soundscape_plan",
+            description=(
+                "Create a generic, non-mutating Grid soundscape recipe from an "
+                "artistic brief. The result names live-resolvable module roles, "
+                "routing order, tuning targets, and safety guardrails; it never "
+                "contains a preset payload."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "brief": {"type": "string"},
+                    "style": {"type": "string"},
+                    "density": {"type": "number", "minimum": 0, "maximum": 1},
+                    "motion": {"type": "number", "minimum": 0, "maximum": 1},
+                    "contrast": {"type": "number", "minimum": 0, "maximum": 1},
+                    "temperature": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["brief"],
+            },
+        ),
+        Tool(
+            name="grid_list_soundscape_styles",
+            description=(
+                "List the internal generic Grid soundscape style vocabulary "
+                "without exposing external patch or preset content."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="get_grid_host_modulators",
+            description=(
+                "Inspect host-level modulation sources exposed by the selected "
+                "Grid device, including names and mapping state. This is "
+                "read-only; resolve module parameters from the live graph."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="grid_insert_modulator",
+            description=(
+                "Insert a cataloged Grid modulator or Modulator Out at graph "
+                "coordinates. This mutates the project and requires confirmation "
+                "unless the prompt or active skill explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "package_id": {"type": "string"},
+                    "x": {"type": "integer", "minimum": -4096, "maximum": 4096},
+                    "y": {"type": "integer", "minimum": -4096, "maximum": 4096},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": ["package_id", "x", "y"],
+            },
+        ),
+        Tool(
+            name="grid_connect_modulator",
+            description=(
+                "Connect a cataloged Grid modulator output to a Grid input. "
+                "This mutates the project and requires confirmation unless the "
+                "prompt or active skill explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_module_id": {"type": "string"},
+                    "source_port": {"type": "integer", "minimum": 0},
+                    "target_module_id": {"type": "string"},
+                    "target_port": {"type": "integer", "minimum": 0},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": [
+                    "source_module_id",
+                    "source_port",
+                    "target_module_id",
+                    "target_port",
+                ],
+            },
+        ),
+        Tool(
+            name="grid_set_modulator_parameter",
+            description=(
+                "Tune one parameter on a cataloged Grid modulator. Use the "
+                "catalog and live graph metadata for valid ranges and options. "
+                "This mutates the project and requires confirmation unless the "
+                "prompt or active skill explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "module_id": {"type": "string"},
+                    "parameter_id": {"type": "string"},
+                    "value": {"anyOf": [{"type": "number"}, {"type": "boolean"}]},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": ["module_id", "parameter_id", "value"],
+            },
+        ),
+        Tool(
+            name="grid_insert_module",
+            description=(
+                "Insert a known Grid module at graph coordinates. This mutates the "
+                "project and requires confirmation unless the prompt or active skill "
+                "explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "package_id": {"type": "string"},
+                    "x": {"type": "integer", "minimum": -4096, "maximum": 4096},
+                    "y": {"type": "integer", "minimum": -4096, "maximum": 4096},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": ["package_id", "x", "y"],
+            },
+        ),
+        Tool(
+            name="grid_set_module_parameter",
+            description=(
+                "Set one editable Grid module parameter. Use get_grid_graph for "
+                "the parameter's native range or discrete options; toggles use booleans. "
+                "This mutates the project and requires confirmation unless the "
+                "prompt or active skill explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "module_id": {"type": "string"},
+                    "parameter_id": {"type": "string"},
+                    "value": {"anyOf": [{"type": "number"}, {"type": "boolean"}]},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": ["module_id", "parameter_id", "value"],
+            },
+        ),
+        Tool(
+            name="grid_connect_modules",
+            description=(
+                "Connect a Grid module output to an input port. This mutates the "
+                "project and requires confirmation unless the prompt or active "
+                "skill explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_module_id": {"type": "string"},
+                    "source_port": {"type": "integer", "minimum": 0},
+                    "target_module_id": {"type": "string"},
+                    "target_port": {"type": "integer", "minimum": 0},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": [
+                    "source_module_id",
+                    "source_port",
+                    "target_module_id",
+                    "target_port",
+                ],
+            },
+        ),
+        Tool(
+            name="grid_disconnect_module",
+            description=(
+                "Disconnect a Grid input port. This mutates the project and "
+                "requires confirmation unless the prompt or active skill "
+                "explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "target_module_id": {"type": "string"},
+                    "target_port": {"type": "integer", "minimum": 0},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": ["target_module_id", "target_port"],
+            },
+        ),
+        Tool(
+            name="grid_list_style_presets",
+            description=(
+                "List the repository's authored Grid style profiles and their "
+                "behavioral principles."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="grid_shape_start",
+            description=(
+                "Start a preview-first Bitwig Grid shaping session. "
+                "Compose a style draft without mutating Bitwig."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "brief": {
+                        "type": "string",
+                        "description": "Human intent for the Grid sound and interaction.",
+                    },
+                    "preset": {
+                        "type": "string",
+                        "enum": ["acid", "ember", "glass", "hollow"],
+                        "description": "Optional parameter scaffold; style profiles choose one when omitted.",
+                    },
+                    "style": {
+                        "type": "string",
+                        "enum": [
+                            "slow-air",
+                            "deep-bed",
+                            "distant-events",
+                            "soft-drift",
+                            "night-motion",
+                            "layered-motion",
+                            "pulse-lab",
+                        ],
+                        "description": "Optional authored style profile for motion, density, and space.",
+                    },
+                    "intensity": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Blend amount; style profiles provide a conservative default.",
+                    },
+                    "controls": {
+                        "type": "object",
+                        "description": "Optional exposed parameter names or indexes mapped to 0-1 values.",
+                        "additionalProperties": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                        },
+                    },
+                },
+                "required": ["brief"],
+            },
+        ),
+        Tool(
+            name="grid_shape_compose",
+            description=(
+                "Revise a Grid shaping draft. This is a non-mutating preview step; "
+                "apply only after reviewing the returned changes."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                    "preset": {
+                        "type": "string",
+                        "enum": ["acid", "ember", "glass", "hollow"],
+                    },
+                    "style": {
+                        "type": "string",
+                        "enum": [
+                            "slow-air",
+                            "deep-bed",
+                            "distant-events",
+                            "soft-drift",
+                            "night-motion",
+                            "layered-motion",
+                            "pulse-lab",
+                        ],
+                    },
+                    "intensity": {"type": "number", "minimum": 0, "maximum": 1},
+                    "controls": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                        },
+                    },
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="grid_shape_status",
+            description="Return the live state and current preview for a Grid shaping session.",
+            inputSchema={
+                "type": "object",
+                "properties": {"session_id": {"type": "string"}},
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="grid_shape_apply",
+            description=(
+                "Apply an exact reviewed Grid shaping revision. Requires confirmation "
+                "unless the prompt or active skill explicitly requests cooperative work; "
+                "stale or externally changed state is always rejected."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                    "revision": {"type": "integer", "minimum": 1},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": ["session_id", "revision"],
+            },
+        ),
+        Tool(
+            name="grid_shape_undo",
+            description="Restore the previous parameter state for a Grid shaping session.",
+            inputSchema={
+                "type": "object",
+                "properties": {"session_id": {"type": "string"}},
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="grid_insert_device",
+            description=(
+                "Insert one known Bitwig device by UUID at the selected device. "
+                "This mutates the project and requires confirmation unless the "
+                "prompt or active skill explicitly requests cooperative work."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "position": {"type": "string", "enum": ["before", "after"]},
+                    "device_id": {"type": "string"},
+                    "confirm": {"type": "boolean"},
+                    "cooperative": {"type": "boolean"},
+                },
+                "required": ["position", "device_id"],
+            },
+        ),
+        Tool(
+            name="grid_project_undo",
+            description="Undo the latest Bitwig host operation through the Grid bridge.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="grid_project_redo",
+            description="Redo the latest Bitwig host operation through the Grid bridge.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="grid_navigate_device",
+            description="Navigate the selected device to its next, previous, or parent device.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": ["next", "previous", "parent"],
+                    }
+                },
+                "required": ["direction"],
+            },
+        ),
+        Tool(
+            name="grid_list_tracks",
+            description=(
+                "List existing main tracks and their zero-based live bank indexes."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="grid_select_track",
+            description=(
+                "Select a main track by the zero-based index returned by grid_list_tracks."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "track_index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 15,
+                    }
+                },
+                "required": ["track_index"],
+            },
         ),
         Tool(
             name="set_selected_device_parameters",
@@ -236,7 +572,6 @@ def get_bitwig_tools() -> List[Tool]:
                 "required": ["name"],
             },
         ),
-
         Tool(
             name="set_device_parameter",
             description="Set value of a device parameter",
@@ -320,184 +655,6 @@ def get_bitwig_tools() -> List[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {},
-            },
-        ),
-        # Browser tools
-        Tool(
-            name="browse_insert_device",
-            description="Open browser to insert a device after the selected device",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "position": {
-                        "type": "string",
-                        "enum": ["after", "before"],
-                        "description": "Position to insert device (before or after selected device)",
-                        "default": "after",
-                    },
-                },
-            },
-        ),
-        Tool(
-            name="browse_device_presets",
-            description="Open browser to browse presets for the selected device",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="commit_browser_selection",
-            description="Commit the current selection in the browser",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="cancel_browser",
-            description="Cancel the current browser session",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="navigate_browser_tab",
-            description="Navigate to next or previous browser tab",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "direction": {
-                        "type": "string",
-                        "enum": ["next", "previous"],
-                        "description": "Navigation direction",
-                    },
-                },
-                "required": ["direction"],
-            },
-        ),
-        Tool(
-            name="navigate_browser_filter",
-            description="Navigate through filter options in the browser",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter_index": {
-                        "type": "integer",
-                        "description": "Index of the filter column (1-6)",
-                    },
-                    "direction": {
-                        "type": "string",
-                        "enum": ["next", "previous"],
-                        "description": "Navigation direction",
-                    },
-                },
-                "required": ["filter_index", "direction"],
-            },
-        ),
-        Tool(
-            name="reset_browser_filter",
-            description="Reset a browser filter column",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter_index": {
-                        "type": "integer",
-                        "description": "Index of the filter column to reset (1-6)",
-                    },
-                },
-                "required": ["filter_index"],
-            },
-        ),
-        Tool(
-            name="navigate_browser_result",
-            description="Navigate through browser results",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "direction": {
-                        "type": "string",
-                        "enum": ["next", "previous"],
-                        "description": "Navigation direction",
-                    },
-                },
-                "required": ["direction"],
-            },
-        ),
-        Tool(
-            name="device_browser_workflow",
-            description="Complete workflow for browsing and inserting a device",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "position": {
-                        "type": "string",
-                        "enum": ["after", "before"],
-                        "description": "Position to insert device (before or after selected device)",
-                        "default": "after",
-                    },
-                    "num_tab_navigations": {
-                        "type": "integer",
-                        "description": "Number of tab navigations (+ for next, - for previous)",
-                        "default": 0,
-                    },
-                    "filter_navigations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "filter_index": {
-                                    "type": "integer",
-                                    "description": "Index of the filter column (1-6)",
-                                },
-                                "steps": {
-                                    "type": "integer",
-                                    "description": "Number of navigation steps (+ for next, - for previous)",
-                                },
-                            },
-                            "required": ["filter_index", "steps"],
-                        },
-                        "description": "List of filter navigation operations",
-                    },
-                    "result_navigations": {
-                        "type": "integer",
-                        "description": "Number of result navigations (+ for next, - for previous)",
-                        "default": 0,
-                    },
-                },
-            },
-        ),
-        Tool(
-            name="preset_browser_workflow",
-            description="Complete workflow for browsing and loading a preset",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter_navigations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "filter_index": {
-                                    "type": "integer",
-                                    "description": "Index of the filter column (1-6)",
-                                },
-                                "steps": {
-                                    "type": "integer",
-                                    "description": "Number of navigation steps (+ for next, - for previous)",
-                                },
-                            },
-                            "required": ["filter_index", "steps"],
-                        },
-                        "description": "List of filter navigation operations",
-                    },
-                    "result_navigations": {
-                        "type": "integer",
-                        "description": "Number of result navigations (+ for next, - for previous)",
-                        "default": 0,
-                    },
-                },
             },
         ),
     ]
@@ -591,7 +748,312 @@ async def execute_tool(
 
         elif name == "get_grid_capabilities":
             capabilities = controller.get_grid_capabilities()
-            return [TextContent(type="text", text=json.dumps(capabilities, sort_keys=True))]
+            return [
+                TextContent(type="text", text=json.dumps(capabilities, sort_keys=True))
+            ]
+        elif name == "get_grid_graph":
+            graph = controller.get_grid_graph()
+            return [TextContent(type="text", text=json.dumps(graph, sort_keys=True))]
+
+        elif name == "get_grid_host_modulators":
+            result = controller.get_grid_host_modulators()
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "search_grid_modules":
+            query = arguments.get("query", "")
+            if not isinstance(query, str):
+                raise ValueError("query must be a string")
+            result = controller.search_grid_modules(query)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+        elif name == "search_grid_modulators":
+            query = arguments.get("query", "")
+            if not isinstance(query, str):
+                raise ValueError("query must be a string")
+            result = controller.search_grid_modulators(query)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_soundscape_plan":
+            from bitwig_mcp_server.grid_soundscaping import plan_soundscape
+
+            result = plan_soundscape(
+                arguments.get("brief", ""),
+                style=arguments.get("style"),
+                density=arguments.get("density", 0.3),
+                motion=arguments.get("motion", 0.35),
+                contrast=arguments.get("contrast", 0.3),
+                temperature=arguments.get("temperature", 0.5),
+            )
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_insert_modulator":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            package_id = arguments.get("package_id")
+            x = arguments.get("x")
+            y = arguments.get("y")
+            if not isinstance(package_id, str) or not package_id.strip():
+                raise ValueError("package_id must be a non-empty UUID string")
+            if isinstance(x, bool) or not isinstance(x, int) or not -4096 <= x <= 4096:
+                raise ValueError("x must be an integer between -4096 and 4096")
+            if isinstance(y, bool) or not isinstance(y, int) or not -4096 <= y <= 4096:
+                raise ValueError("y must be an integer between -4096 and 4096")
+            result = controller.grid_insert_modulator(package_id, x, y)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_connect_modulator":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            source_module_id = arguments.get("source_module_id")
+            target_module_id = arguments.get("target_module_id")
+            source_port = arguments.get("source_port")
+            target_port = arguments.get("target_port")
+            if not isinstance(source_module_id, str) or not source_module_id.strip():
+                raise ValueError("source_module_id must be a non-empty string")
+            if not isinstance(target_module_id, str) or not target_module_id.strip():
+                raise ValueError("target_module_id must be a non-empty string")
+            if (
+                isinstance(source_port, bool)
+                or not isinstance(source_port, int)
+                or source_port < 0
+            ):
+                raise ValueError("source_port must be a non-negative integer")
+            if (
+                isinstance(target_port, bool)
+                or not isinstance(target_port, int)
+                or target_port < 0
+            ):
+                raise ValueError("target_port must be a non-negative integer")
+            result = controller.grid_connect_modulator(
+                source_module_id,
+                source_port,
+                target_module_id,
+                target_port,
+            )
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+        elif name == "grid_set_modulator_parameter":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            module_id = arguments.get("module_id")
+            parameter_id = arguments.get("parameter_id")
+            value = arguments.get("value")
+            if not isinstance(module_id, str) or not module_id.strip():
+                raise ValueError("module_id must be a non-empty string")
+            if not isinstance(parameter_id, str) or not parameter_id.strip():
+                raise ValueError("parameter_id must be a non-empty string")
+            if isinstance(value, bool):
+                normalized_value = value
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                if not math.isfinite(float(value)):
+                    raise ValueError("numeric Grid parameter values must be finite")
+                normalized_value = float(value)
+            else:
+                raise ValueError("value must be a boolean or number")
+            result = controller.grid_set_modulator_parameter(
+                module_id, parameter_id, normalized_value
+            )
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_insert_module":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            package_id = arguments.get("package_id")
+            x = arguments.get("x")
+            y = arguments.get("y")
+            if not isinstance(package_id, str) or not package_id.strip():
+                raise ValueError("package_id must be a non-empty UUID string")
+            if isinstance(x, bool) or not isinstance(x, int) or not -4096 <= x <= 4096:
+                raise ValueError("x must be an integer between -4096 and 4096")
+            if isinstance(y, bool) or not isinstance(y, int) or not -4096 <= y <= 4096:
+                raise ValueError("y must be an integer between -4096 and 4096")
+            result = controller.grid_insert_module(package_id, x, y)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_set_module_parameter":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            module_id = arguments.get("module_id")
+            parameter_id = arguments.get("parameter_id")
+            value = arguments.get("value")
+            if not isinstance(module_id, str) or not module_id.strip():
+                raise ValueError("module_id must be a non-empty string")
+            if not isinstance(parameter_id, str) or not parameter_id.strip():
+                raise ValueError("parameter_id must be a non-empty string")
+            if isinstance(value, bool):
+                normalized_value = value
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                if not math.isfinite(float(value)):
+                    raise ValueError("numeric Grid parameter values must be finite")
+                normalized_value = float(value)
+            else:
+                raise ValueError("value must be a boolean or number")
+            result = controller.grid_set_module_parameter(
+                module_id, parameter_id, normalized_value
+            )
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_connect_modules":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            source_module_id = arguments.get("source_module_id")
+            target_module_id = arguments.get("target_module_id")
+            source_port = arguments.get("source_port")
+            target_port = arguments.get("target_port")
+            if not isinstance(source_module_id, str) or not source_module_id.strip():
+                raise ValueError("source_module_id must be a non-empty string")
+            if not isinstance(target_module_id, str) or not target_module_id.strip():
+                raise ValueError("target_module_id must be a non-empty string")
+            if (
+                isinstance(source_port, bool)
+                or not isinstance(source_port, int)
+                or source_port < 0
+            ):
+                raise ValueError("source_port must be a non-negative integer")
+            if (
+                isinstance(target_port, bool)
+                or not isinstance(target_port, int)
+                or target_port < 0
+            ):
+                raise ValueError("target_port must be a non-negative integer")
+            result = controller.grid_connect_modules(
+                source_module_id, source_port, target_module_id, target_port
+            )
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_disconnect_module":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            target_module_id = arguments.get("target_module_id")
+            target_port = arguments.get("target_port")
+            if not isinstance(target_module_id, str) or not target_module_id.strip():
+                raise ValueError("target_module_id must be a non-empty string")
+            if (
+                isinstance(target_port, bool)
+                or not isinstance(target_port, int)
+                or target_port < 0
+            ):
+                raise ValueError("target_port must be a non-negative integer")
+            result = controller.grid_disconnect_module(target_module_id, target_port)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_list_style_presets":
+            from bitwig_mcp_server.grid_workflow import GridShapeManager
+
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(GridShapeManager.list_styles(), sort_keys=True),
+                )
+            ]
+
+        elif name == "grid_list_soundscape_styles":
+            from bitwig_mcp_server.grid_soundscaping import list_soundscape_styles
+
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(list_soundscape_styles(), sort_keys=True),
+                )
+            ]
+
+        elif name in {
+            "grid_shape_start",
+            "grid_shape_compose",
+            "grid_shape_status",
+            "grid_shape_apply",
+            "grid_shape_undo",
+        }:
+            from bitwig_mcp_server.grid_workflow import get_grid_shape_manager
+
+            manager = get_grid_shape_manager(controller)
+            if name == "grid_shape_start":
+                result = manager.start(
+                    controller,
+                    brief=arguments.get("brief", ""),
+                    preset=arguments.get("preset"),
+                    intensity=arguments.get("intensity"),
+                    controls=arguments.get("controls"),
+                    style=arguments.get("style"),
+                )
+            elif name == "grid_shape_compose":
+                result = manager.compose(
+                    controller,
+                    arguments.get("session_id", ""),
+                    preset=arguments.get("preset"),
+                    intensity=arguments.get("intensity"),
+                    controls=arguments.get("controls"),
+                    style=arguments.get("style"),
+                )
+            elif name == "grid_shape_status":
+                result = manager.status(controller, arguments.get("session_id", ""))
+            elif name == "grid_shape_apply":
+                result = manager.apply(
+                    controller,
+                    arguments.get("session_id", ""),
+                    arguments.get("revision"),
+                    arguments.get("confirm") is True
+                    or arguments.get("cooperative") is True,
+                )
+            else:
+                result = manager.undo(controller, arguments.get("session_id", ""))
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_insert_device":
+            if not _mutation_is_authorized(arguments):
+                raise ValueError(
+                    "confirm must be true unless cooperative work is authorized"
+                )
+            position = arguments.get("position")
+            device_id = arguments.get("device_id")
+            if position not in {"before", "after"}:
+                raise ValueError("position must be before or after")
+            if not isinstance(device_id, str) or not device_id.strip():
+                raise ValueError("device_id must be a non-empty UUID string")
+            result = controller.grid_insert_device(position, device_id)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_project_undo":
+            result = controller.grid_undo()
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_project_redo":
+            result = controller.grid_redo()
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_navigate_device":
+            direction = arguments.get("direction")
+            if direction not in {"next", "previous", "parent"}:
+                raise ValueError("direction must be next, previous, or parent")
+            result = controller.grid_navigate(direction)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_list_tracks":
+            result = controller.grid_tracks()
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
+
+        elif name == "grid_select_track":
+            track_index = arguments.get("track_index")
+            if (
+                isinstance(track_index, bool)
+                or not isinstance(track_index, int)
+                or not 0 <= track_index <= 15
+            ):
+                raise ValueError("track_index must be an integer between 0 and 15")
+            result = controller.grid_select_track(track_index)
+            return [TextContent(type="text", text=json.dumps(result, sort_keys=True))]
 
         elif name == "set_selected_device_parameters":
             parameters = arguments.get("parameters")
@@ -709,500 +1171,6 @@ async def execute_tool(
         elif name == "toggle_device_window":
             controller.client.toggle_device_window()
             return [TextContent(type="text", text="Device window toggled")]
-
-        # Browser tools
-        elif name == "browse_insert_device":
-            position = arguments.get("position", "after")
-
-            if position not in ["after", "before"]:
-                raise ValueError("Invalid position: must be 'after' or 'before'")
-
-            controller.client.browse_for_device(position)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Browser opened to insert device {position} selected device",
-                )
-            ]
-
-        elif name == "browse_device_presets":
-            controller.client.browse_for_preset()
-            return [
-                TextContent(type="text", text="Browser opened to browse device presets")
-            ]
-
-        elif name == "commit_browser_selection":
-            controller.client.commit_browser_selection()
-            return [TextContent(type="text", text="Browser selection committed")]
-
-        elif name == "cancel_browser":
-            controller.client.cancel_browser()
-            return [TextContent(type="text", text="Browser session canceled")]
-
-        elif name == "navigate_browser_tab":
-            direction = arguments.get("direction")
-
-            if direction is None:
-                raise ValueError("Missing required argument: direction")
-
-            # Convert direction to "+" or "-"
-            if direction == "next":
-                dir_symbol = "+"
-            elif direction == "previous":
-                dir_symbol = "-"
-            else:
-                raise ValueError("Invalid direction: must be 'next' or 'previous'")
-
-            controller.client.navigate_browser_tab(dir_symbol)
-            return [
-                TextContent(type="text", text=f"Navigated to {direction} browser tab")
-            ]
-
-        elif name == "navigate_browser_filter":
-            filter_index = arguments.get("filter_index")
-            direction = arguments.get("direction")
-
-            if filter_index is None or direction is None:
-                raise ValueError("Missing required arguments: filter_index, direction")
-
-            if (
-                not isinstance(filter_index, int)
-                or filter_index < 1
-                or filter_index > 6
-            ):
-                raise ValueError("Invalid filter_index: must be between 1 and 6")
-
-            # Convert direction to "+" or "-"
-            if direction == "next":
-                dir_symbol = "+"
-            elif direction == "previous":
-                dir_symbol = "-"
-            else:
-                raise ValueError("Invalid direction: must be 'next' or 'previous'")
-
-            controller.client.navigate_browser_filter(filter_index, dir_symbol)
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Navigated to {direction} option in filter {filter_index}",
-                )
-            ]
-
-        elif name == "reset_browser_filter":
-            filter_index = arguments.get("filter_index")
-
-            if filter_index is None:
-                raise ValueError("Missing required argument: filter_index")
-
-            if (
-                not isinstance(filter_index, int)
-                or filter_index < 1
-                or filter_index > 6
-            ):
-                raise ValueError("Invalid filter_index: must be between 1 and 6")
-
-            controller.client.reset_browser_filter(filter_index)
-            return [TextContent(type="text", text=f"Reset filter {filter_index}")]
-
-        elif name == "navigate_browser_result":
-            direction = arguments.get("direction")
-
-            if direction is None:
-                raise ValueError("Missing required argument: direction")
-
-            # Convert direction to "+" or "-"
-            if direction == "next":
-                dir_symbol = "+"
-            elif direction == "previous":
-                dir_symbol = "-"
-            else:
-                raise ValueError("Invalid direction: must be 'next' or 'previous'")
-
-            controller.client.navigate_browser_result(dir_symbol)
-            return [
-                TextContent(
-                    type="text", text=f"Navigated to {direction} browser result"
-                )
-            ]
-
-        elif name == "device_browser_workflow":
-            position = arguments.get("position", "after")
-            num_tab_navigations = arguments.get("num_tab_navigations", 0)
-            filter_navigations = arguments.get("filter_navigations", [])
-            result_navigations = arguments.get("result_navigations", 0)
-
-            # Validate parameters
-            if position not in ["after", "before"]:
-                raise ValueError("Invalid position: must be 'after' or 'before'")
-
-            if not isinstance(num_tab_navigations, int):
-                raise ValueError("Invalid num_tab_navigations: must be an integer")
-
-            if not isinstance(result_navigations, int):
-                raise ValueError("Invalid result_navigations: must be an integer")
-
-            # Convert filter_navigations to the format required by browse_and_insert_device
-            filter_nav_list = []
-            if filter_navigations:
-                for filter_nav in filter_navigations:
-                    filter_index = filter_nav.get("filter_index")
-                    steps = filter_nav.get("steps")
-
-                    if filter_index is None or steps is None:
-                        raise ValueError(
-                            "Filter navigation missing filter_index or steps"
-                        )
-
-                    if (
-                        not isinstance(filter_index, int)
-                        or filter_index < 1
-                        or filter_index > 6
-                    ):
-                        raise ValueError(
-                            f"Invalid filter_index: {filter_index} must be between 1 and 6"
-                        )
-
-                    if not isinstance(steps, int):
-                        raise ValueError(f"Invalid steps: {steps} must be an integer")
-
-                    filter_nav_list.append((filter_index, steps))
-
-            # Execute the workflow
-            # Open device browser
-            controller.client.browse_for_device(position)
-
-            # Navigate through tabs
-            for _ in range(abs(num_tab_navigations)):
-                direction = "+" if num_tab_navigations >= 0 else "-"
-                controller.client.navigate_browser_tab(direction)
-
-            # Apply filter selections
-            if filter_nav_list:
-                for filter_index, steps in filter_nav_list:
-                    for _ in range(abs(steps)):
-                        direction = "+" if steps >= 0 else "-"
-                        controller.client.navigate_browser_filter(
-                            filter_index, direction
-                        )
-
-            # Navigate through results
-            for _ in range(abs(result_navigations)):
-                direction = "+" if result_navigations >= 0 else "-"
-                controller.client.navigate_browser_result(direction)
-
-            # Commit selection
-            controller.client.commit_browser_selection()
-
-            return [
-                TextContent(
-                    type="text", text="Device browser workflow completed successfully"
-                )
-            ]
-
-        elif name == "preset_browser_workflow":
-            filter_navigations = arguments.get("filter_navigations", [])
-            result_navigations = arguments.get("result_navigations", 0)
-
-            # Validate parameters
-            if not isinstance(result_navigations, int):
-                raise ValueError("Invalid result_navigations: must be an integer")
-
-            # Convert filter_navigations to the format required by browse_and_load_preset
-            filter_nav_list = []
-            if filter_navigations:
-                for filter_nav in filter_navigations:
-                    filter_index = filter_nav.get("filter_index")
-                    steps = filter_nav.get("steps")
-
-                    if filter_index is None or steps is None:
-                        raise ValueError(
-                            "Filter navigation missing filter_index or steps"
-                        )
-
-                    if (
-                        not isinstance(filter_index, int)
-                        or filter_index < 1
-                        or filter_index > 6
-                    ):
-                        raise ValueError(
-                            f"Invalid filter_index: {filter_index} must be between 1 and 6"
-                        )
-
-                    if not isinstance(steps, int):
-                        raise ValueError(f"Invalid steps: {steps} must be an integer")
-
-                    filter_nav_list.append((filter_index, steps))
-
-            # Execute the workflow
-            # Open preset browser
-            controller.client.browse_for_preset()
-
-            # Apply filter selections
-            if filter_nav_list:
-                for filter_index, steps in filter_nav_list:
-                    for _ in range(abs(steps)):
-                        direction = "+" if steps >= 0 else "-"
-                        controller.client.navigate_browser_filter(
-                            filter_index, direction
-                        )
-
-            # Navigate through results
-            for _ in range(abs(result_navigations)):
-                direction = "+" if result_navigations >= 0 else "-"
-                controller.client.navigate_browser_result(direction)
-
-            # Commit selection
-            controller.client.commit_browser_selection()
-
-            return [
-                TextContent(
-                    type="text", text="Preset browser workflow completed successfully"
-                )
-            ]
-
-        # Device browser index tools
-        elif name == "search_device_browser":
-            query = arguments.get("query")
-            if not query:
-                raise ValueError("Missing required argument: query")
-
-            num_results = arguments.get("num_results", 5)
-            category = arguments.get("category")
-            type_filter = arguments.get("type")
-            creator = arguments.get("creator")
-
-            # Initialize the recommender
-            index_dir = os.path.join(Path.home(), "bitwig_browser_index")
-            recommender = BitwigDeviceRecommender(persistent_dir=index_dir)
-
-            # Build filter dictionary
-            filter_options = {}
-            if category:
-                filter_options["category"] = category
-            if type_filter:
-                filter_options["type"] = type_filter
-            if creator:
-                filter_options["creator"] = creator
-
-            # Use None if no filters
-            if not filter_options:
-                filter_options = None
-
-            # Search for devices
-            try:
-                # Check if index exists
-                if recommender.indexer.get_device_count() == 0:
-                    return [
-                        TextContent(
-                            type="text",
-                            text="The device index has not been built yet. Please run bitwig-browser-index to build it.",
-                        )
-                    ]
-
-                results = recommender.indexer.search_devices(
-                    query=query, n_results=num_results, filter_options=filter_options
-                )
-
-                # Format results
-                response_lines = [f"Search results for: {query}"]
-                response_lines.append("")
-
-                for i, result in enumerate(results, 1):
-                    response_lines.append(f"{i}. {result['name']}")
-                    response_lines.append(f"   Category: {result['category']}")
-                    response_lines.append(f"   Type: {result['type']}")
-                    response_lines.append(f"   Creator: {result['creator']}")
-                    if result.get("tags"):
-                        response_lines.append(f"   Tags: {', '.join(result['tags'])}")
-                    if result.get("description"):
-                        # Truncate long descriptions
-                        desc = result["description"]
-                        if len(desc) > 200:
-                            desc = desc[:200] + "..."
-                        response_lines.append(f"   Description: {desc}")
-                    response_lines.append("")
-
-                return [TextContent(type="text", text="\n".join(response_lines))]
-
-            except Exception as e:
-                logger.exception(f"Error searching device browser: {e}")
-                return [
-                    TextContent(
-                        type="text", text=f"Error searching device browser: {str(e)}"
-                    )
-                ]
-
-        elif name == "recommend_devices":
-            description = arguments.get("description")
-            if not description:
-                raise ValueError("Missing required argument: description")
-
-            num_results = arguments.get("num_results", 5)
-            category = arguments.get("category")
-
-            # Initialize the recommender
-            index_dir = os.path.join(Path.home(), "bitwig_browser_index")
-            recommender = BitwigDeviceRecommender(persistent_dir=index_dir)
-
-            try:
-                # Check if index exists
-                if recommender.indexer.get_device_count() == 0:
-                    return [
-                        TextContent(
-                            type="text",
-                            text="The device index has not been built yet. Please run bitwig-browser-index to build it.",
-                        )
-                    ]
-
-                recommendations = recommender.recommend_devices(
-                    task_description=description,
-                    num_results=num_results,
-                    filter_category=category,
-                )
-
-                # Format recommendations
-                response_lines = [f"Recommended devices for: {description}"]
-                response_lines.append("")
-
-                for i, rec in enumerate(recommendations, 1):
-                    response_lines.append(f"{i}. {rec['device']} ({rec['category']})")
-                    response_lines.append(f"   Creator: {rec['creator']}")
-                    response_lines.append(f"   Relevance: {rec['relevance_score']:.2f}")
-                    response_lines.append(f"   Why: {rec['explanation']}")
-                    if rec.get("description"):
-                        # Truncate long descriptions
-                        desc = rec["description"]
-                        if len(desc) > 150:
-                            desc = desc[:150] + "..."
-                        response_lines.append(f"   Description: {desc}")
-                    response_lines.append("")
-
-                return [TextContent(type="text", text="\n".join(response_lines))]
-
-            except Exception as e:
-                logger.exception(f"Error recommending devices: {e}")
-                return [
-                    TextContent(
-                        type="text", text=f"Error recommending devices: {str(e)}"
-                    )
-                ]
-
-        elif name == "get_device_categories":
-            # Initialize the recommender
-            index_dir = os.path.join(Path.home(), "bitwig_browser_index")
-            recommender = BitwigDeviceRecommender(persistent_dir=index_dir)
-
-            try:
-                # Check if index exists
-                if recommender.indexer.get_device_count() == 0:
-                    return [
-                        TextContent(
-                            type="text",
-                            text="The device index has not been built yet. Please run bitwig-browser-index to build it.",
-                        )
-                    ]
-
-                # Get stats including categories
-                stats = recommender.indexer.get_collection_stats()
-
-                # Format response
-                response_lines = ["Available Device Categories:"]
-                response_lines.append("")
-
-                for category in stats.get("categories", []):
-                    response_lines.append(f"- {category}")
-
-                response_lines.append("")
-                response_lines.append("Available Device Types:")
-                response_lines.append("")
-
-                for type_ in stats.get("types", []):
-                    response_lines.append(f"- {type_}")
-
-                response_lines.append("")
-                response_lines.append("Available Creators:")
-                response_lines.append("")
-
-                for creator in stats.get("creators", []):
-                    response_lines.append(f"- {creator}")
-
-                return [TextContent(type="text", text="\n".join(response_lines))]
-
-            except Exception as e:
-                logger.exception(f"Error getting device categories: {e}")
-                return [
-                    TextContent(
-                        type="text", text=f"Error getting device categories: {str(e)}"
-                    )
-                ]
-
-        elif name == "get_device_info":
-            device_name = arguments.get("device_name")
-            if not device_name:
-                raise ValueError("Missing required argument: device_name")
-
-            # Initialize the recommender
-            index_dir = os.path.join(Path.home(), "bitwig_browser_index")
-            recommender = BitwigDeviceRecommender(persistent_dir=index_dir)
-
-            try:
-                # Check if index exists
-                if recommender.indexer.get_device_count() == 0:
-                    return [
-                        TextContent(
-                            type="text",
-                            text="The device index has not been built yet. Please run bitwig-browser-index to build it.",
-                        )
-                    ]
-
-                # Search for the exact device
-                results = recommender.indexer.search_devices(
-                    query=device_name, n_results=10
-                )
-
-                # Find an exact match if possible
-                exact_match = None
-                for result in results:
-                    if result["name"].lower() == device_name.lower():
-                        exact_match = result
-                        break
-
-                if not exact_match and results:
-                    # Use the closest match
-                    exact_match = results[0]
-
-                if exact_match:
-                    # Format the device information
-                    response_lines = [f"Device Information: {exact_match['name']}"]
-                    response_lines.append("")
-                    response_lines.append(f"Category: {exact_match['category']}")
-                    response_lines.append(f"Type: {exact_match['type']}")
-                    response_lines.append(f"Creator: {exact_match['creator']}")
-
-                    if exact_match.get("tags"):
-                        response_lines.append(f"Tags: {', '.join(exact_match['tags'])}")
-
-                    if exact_match.get("description"):
-                        response_lines.append("")
-                        response_lines.append("Description:")
-                        response_lines.append(exact_match["description"])
-
-                    return [TextContent(type="text", text="\n".join(response_lines))]
-                else:
-                    return [
-                        TextContent(
-                            type="text",
-                            text=f"No device found with name '{device_name}'",
-                        )
-                    ]
-
-            except Exception as e:
-                logger.exception(f"Error getting device info: {e}")
-                return [
-                    TextContent(
-                        type="text", text=f"Error getting device info: {str(e)}"
-                    )
-                ]
 
         else:
             raise ValueError(f"Unknown tool: {name}")

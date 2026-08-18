@@ -1,5 +1,5 @@
 """
-Settings configuration for the Bitwig MCP Server.
+Settings configuration for the Bitwig Grid Bridge MCP adapter.
 
 This module provides configuration settings using Pydantic for validation.
 """
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -32,8 +32,8 @@ class Settings(BaseSettings):
         mcp_port (int): The port for the MCP server's HTTP/SSE transport.
     """
 
-    app_name: str = "bitwig-mcp-server"
-    app_tagline: str = "MCP server for Bitwig Studio."
+    app_name: str = "bitwig-grid-bridge"
+    app_tagline: str = "MCP adapter for the Bitwig Grid Bridge."
     root_dir: Path = Field(
         default_factory=lambda: Path(__file__).resolve().parent.parent
     )
@@ -68,13 +68,12 @@ class Settings(BaseSettings):
         default=8080, description="Port for MCP server HTTP/SSE transport"
     )
 
-    class Config:
-        """Configuration for settings behavior."""
-
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        env_prefix = "BITWIG_MCP_"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="BITWIG_MCP_",
+        case_sensitive=False,
+    )
 
     @field_validator("log_level")
     def validate_log_level(cls, v: str) -> str:
@@ -127,7 +126,7 @@ class Settings(BaseSettings):
         Returns:
             Path to the .env file if it exists, None otherwise
         """
-        env_file = self.root_dir / self.Config.env_file
+        env_file = self.root_dir / str(self.model_config["env_file"])
         return env_file if env_file.exists() else None
 
 

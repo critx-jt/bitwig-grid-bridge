@@ -1,6 +1,6 @@
 [project]
-name = "bitwig-mcp-server"
-version = "0.0.1"
+name = "bitwig-grid-bridge"
+version = "0.1.0"
 description = "Companion MCP and OSC adapter for Bitwig Grid Bridge."
 authors = [{ name = "John Stanford", email = "787382+jxstanford@users.noreply.github.com" }]
 readme = "README.md"
@@ -23,10 +23,6 @@ dependencies = [
     "pydantic-settings>=2.6.1",
     "pytest-asyncio>=0.25.3",
     "python-osc>=1.8.3",
-    "chromadb>=0.4.18",
-    "sentence-transformers>=2.2.2",
-    "beautifulsoup4>=4.12.2",
-    "requests>=2.31.0",
 ]
 
 [project.urls]
@@ -34,13 +30,9 @@ Homepage = "https://github.com/critx-jt/bitwig-grid-bridge"
 Repository = "https://github.com/critx-jt/bitwig-grid-bridge"
 Documentation = "https://critx-jt.github.io/bitwig-grid-bridge/"
 
-[project.scripts]
-bitwig-browser-index = "bitwig_mcp_server.utils.index_browser:main"
-bitwig-device-recommend = "bitwig_mcp_server.utils.recommend_devices:main"
-bitwig-enhance-index = "bitwig_mcp_server.utils.enhance_index:main"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.2.0",
     "pre-commit>=2.20.0",
     "tox-uv>=1.11.3",

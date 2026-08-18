@@ -65,15 +65,14 @@ class BitwigOSCController:
         self.connected = False
         self.last_refresh = 0.0
         self.connection_attempts = 0
-        # In-memory snapshots are intentionally process-local.  They provide
-        # safe comparison/apply workflows without pretending OSC exposes a
-        # stable Grid graph or persistent device identifiers.
         self.parameter_snapshots: Dict[str, Dict[str, Any]] = {}
+        # In-memory snapshots are intentionally process-local. They provide
+        # safe comparison/apply workflows for the OSC parameter surface;
+        # Grid topology is read and mutated through the bridge graph API.
         self.bridge: GridBridgeClient | None = (
             GridBridgeClient(bridge_host, bridge_port) if bridge_enabled else None
         )
         self.bridge_available = False
-
 
     def start(self) -> None:
         """Start the OSC controller.
@@ -98,10 +97,11 @@ class BitwigOSCController:
             if self.bridge is not None:
                 self.bridge_available = self.bridge.ping()
                 if self.bridge_available:
-                    logger.info("Bitwig Grid bridge detected; selected-device operations will prefer it")
+                    logger.info(
+                        "Bitwig Grid bridge detected; selected-device operations will prefer it"
+                    )
                 else:
                     logger.info("Bitwig Grid bridge unavailable; using OSC fallback")
-
 
             self.ready = True
             self.connected = True
@@ -488,7 +488,7 @@ class BitwigOSCController:
                     }
                     for parameter in payload.get("parameters", [])
                 ]
-                return {
+                result = {
                     "available": bool(payload.get("exists")),
                     "graph_available": bool(payload.get("graph_available", False)),
                     "bridge": True,
@@ -498,8 +498,13 @@ class BitwigOSCController:
                     },
                     "parameters": parameters,
                 }
+                if result["graph_available"]:
+                    result["graph"] = self.bridge.graph_state()
+                return result
             except GridBridgeError as error:
-                logger.warning("Bitwig Grid bridge read failed; falling back to OSC: %s", error)
+                logger.warning(
+                    "Bitwig Grid bridge read failed; falling back to OSC: %s", error
+                )
                 self.bridge_available = False
 
         params = self.get_device_params()
@@ -518,6 +523,7 @@ class BitwigOSCController:
             "properties": device_properties,
             "parameters": params,
         }
+
     def get_grid_capabilities(self) -> Dict[str, Any]:
         """Return bridge capabilities and selected-device inspection data."""
         if self.bridge is None:
@@ -541,10 +547,212 @@ class BitwigOSCController:
                 "error": str(error),
             }
 
+    def get_grid_graph(self) -> Dict[str, Any]:
+        """Return the selected Grid graph topology and editable parameters."""
+        if not self._ensure_bridge_available():
+            return {"available": False, "bridge": False, "graph_available": False}
+        try:
+            graph = self.bridge.graph_state()
+            return {
+                "available": True,
+                "bridge": True,
+                **graph,
+            }
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {
+                "available": False,
+                "bridge": False,
+                "graph_available": False,
+                "error": str(error),
+            }
 
-    def set_selected_device_parameters(
-        self, parameters: Dict[int, float]
-    ) -> List[int]:
+    def get_grid_host_modulators(self) -> Dict[str, Any]:
+        """Return host-level modulation sources on the selected Grid device."""
+        if not self._ensure_bridge_available():
+            return {"available": False, "bridge": False, "sources": []}
+        try:
+            return {
+                "available": True,
+                "bridge": True,
+                **self.bridge.graph_host_modulators(),
+            }
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {
+                "available": False,
+                "bridge": False,
+                "sources": [],
+                "error": str(error),
+            }
+
+    def search_grid_modules(self, query: str = "") -> Dict[str, Any]:
+        """Search the installed Bitwig Grid module catalog."""
+        if not self._ensure_bridge_available():
+            return {"available": False, "bridge": False, "modules": []}
+        try:
+            return self.bridge.graph_catalog(query)
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {
+                "available": False,
+                "bridge": False,
+                "modules": [],
+                "error": str(error),
+            }
+
+    def search_grid_modulators(self, query: str = "") -> Dict[str, Any]:
+        """Search the installed Grid modulation source and destination catalog."""
+        if not self._ensure_bridge_available():
+            return {"available": False, "bridge": False, "modulators": []}
+        try:
+            return self.bridge.graph_modulators(query)
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {
+                "available": False,
+                "bridge": False,
+                "modulators": [],
+                "error": str(error),
+            }
+
+    def grid_insert_modulator(self, package_id: str, x: int, y: int) -> Dict[str, Any]:
+        """Insert a cataloged Grid modulator at graph coordinates."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.graph_insert_modulator(package_id, x, y)
+
+    def grid_connect_modulator(
+        self,
+        source_module_id: str,
+        source_port: int,
+        target_module_id: str,
+        target_port: int,
+    ) -> Dict[str, Any]:
+        """Connect a cataloged Grid modulator to a Grid input."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.graph_connect_modulator(
+            source_module_id,
+            source_port,
+            target_module_id,
+            target_port,
+        )
+
+    def grid_set_modulator_parameter(
+        self,
+        module_id: str,
+        parameter_id: str,
+        value: float | int | bool,
+    ) -> Dict[str, Any]:
+        """Tune one parameter on a cataloged Grid modulator."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.graph_set_modulator_parameter(module_id, parameter_id, value)
+
+    def grid_insert_module(self, package_id: str, x: int, y: int) -> Dict[str, Any]:
+        """Insert a Grid module at graph coordinates."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.graph_insert(package_id, x, y)
+
+    def grid_set_module_parameter(
+        self, module_id: str, parameter_id: str, value: float | int | bool
+    ) -> Dict[str, Any]:
+        """Set one editable Grid module parameter."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.graph_set_parameter(module_id, parameter_id, value)
+
+    def grid_connect_modules(
+        self,
+        source_module_id: str,
+        source_port: int,
+        target_module_id: str,
+        target_port: int,
+    ) -> Dict[str, Any]:
+        """Connect a Grid output port to a Grid input port."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.graph_connect(
+            source_module_id, source_port, target_module_id, target_port
+        )
+
+    def grid_disconnect_module(
+        self, target_module_id: str, target_port: int
+    ) -> Dict[str, Any]:
+        """Disconnect a Grid input port."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.graph_disconnect(target_module_id, target_port)
+
+    def grid_history(self) -> Dict[str, Any]:
+        """Return Bitwig project history state from the local bridge."""
+        if not self._ensure_bridge_available():
+            return {"available": False, "bridge": False}
+        try:
+            return self.bridge.history()
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {"available": False, "bridge": False, "error": str(error)}
+
+    def grid_actions(self, filter_text: str = "") -> Dict[str, Any]:
+        """List host actions exposed by the local bridge."""
+        if not self._ensure_bridge_available():
+            return {"available": False, "bridge": False}
+        try:
+            return self.bridge.actions(filter_text)
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {"available": False, "bridge": False, "error": str(error)}
+
+    def grid_invoke_action(self, action_id: str) -> Dict[str, Any]:
+        """Invoke one exact Bitwig host action exposed by the bridge."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.invoke_action(action_id)
+
+    def grid_insert_device(self, position: str, device_id: str) -> Dict[str, Any]:
+        """Insert a Bitwig device through the local bridge."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.insert_device(position, device_id)
+
+    def grid_undo(self) -> Dict[str, Any]:
+        """Undo the latest Bitwig host operation."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.undo()
+
+    def grid_redo(self) -> Dict[str, Any]:
+        """Redo the latest Bitwig host operation."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.redo()
+
+    def grid_navigate(self, direction: str) -> Dict[str, Any]:
+        """Navigate the selected device through the local bridge."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.navigate(direction)
+
+    def grid_tracks(self) -> Dict[str, Any]:
+        """List the live main-track bank exposed by the local bridge."""
+        if not self._ensure_bridge_available():
+            return {"available": False, "bridge": False}
+        try:
+            return self.bridge.tracks()
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {"available": False, "bridge": False, "error": str(error)}
+
+    def grid_select_track(self, index: int) -> Dict[str, Any]:
+        """Select a main track by its zero-based live bank index."""
+        if not self._ensure_bridge_available():
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge.select_track(index)
+
+    def set_selected_device_parameters(self, parameters: Dict[int, float]) -> List[int]:
         """Set multiple selected-device parameters and return changed indexes."""
         if not parameters:
             raise ValueError("At least one parameter is required")
@@ -555,21 +763,23 @@ class BitwigOSCController:
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise ValueError(f"Invalid value for parameter {index}")
             if value < 0 or value > 128:
-                raise ValueError(f"Value for parameter {index} must be between 0 and 128")
+                raise ValueError(
+                    f"Value for parameter {index} must be between 0 and 128"
+                )
 
         if self._ensure_bridge_available():
             try:
                 self.bridge.set_parameters_atomic(parameters)
                 return list(parameters)
             except GridBridgeError as error:
-                logger.warning("Bitwig Grid bridge write failed; falling back to OSC: %s", error)
+                logger.warning(
+                    "Bitwig Grid bridge write failed; falling back to OSC: %s", error
+                )
                 self.bridge_available = False
 
         for index, value in parameters.items():
             self.client.set_device_parameter(index, value)
         return list(parameters)
-
-
 
     def save_parameter_snapshot(self, name: str) -> Dict[str, Any]:
         """Capture the currently observable selected-device parameter state."""
@@ -621,7 +831,6 @@ class BitwigOSCController:
         return self.set_selected_device_parameters(
             {int(index): value for index, value in values.items() if value is not None}
         )
-
 
     def get_status(self) -> Dict[str, Any]:
         """Get controller status information

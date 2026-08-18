@@ -1,0 +1,15 @@
+{
+  "name": "Glass Aperture",
+  "project": "../projects/polygrid-remote-controls/polygrid-remote-controls.bwproject",
+  "brief": "A crystalline Poly Grid voice with open motion and restrained shimmer.",
+  "preset": "glass",
+  "intensity": 0.72,
+  "controls": {
+    "PW": 0.66,
+    "Saw %": 0.78,
+    "Tri %": 0.1,
+    "Pitch": 0.54,
+    "Detune": 0.58
+  },
+  "interaction": "Preview first; keep the sweep reversible and leave headroom for performance."
+}

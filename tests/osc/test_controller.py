@@ -39,6 +39,7 @@ class TestBitwigOSCController(unittest.TestCase):
         # Test stop
         self.controller.stop()
         self.mock_server.stop.assert_called_once()
+
     def test_start_does_not_require_refresh_response(self):
         """Starting succeeds when Bitwig does not acknowledge /refresh."""
         self.mock_server.received_messages = {}
@@ -115,6 +116,39 @@ class TestBitwigOSCController(unittest.TestCase):
         assert self.controller.bridge_available is True
         assert state["properties"]["name"] == "Poly Grid"
 
+    def test_bridge_graph_state_is_included_for_grid_device(self):
+        self.controller.bridge = MagicMock()
+        self.controller.bridge_available = True
+        self.controller.bridge.state.return_value = {
+            "exists": True,
+            "graph_available": True,
+            "name": "Poly Grid",
+            "device_type": "Instrument",
+            "parameters": [],
+        }
+        self.controller.bridge.graph_state.return_value = {
+            "ok": True,
+            "modules": {"count": 2, "items": []},
+        }
+
+        state = self.controller.get_selected_device_state()
+
+        self.controller.bridge.graph_state.assert_called_once_with()
+        assert state["graph"]["modules"]["count"] == 2
+
+    def test_bridge_host_modulator_state_is_forwarded(self):
+        self.controller.bridge = MagicMock()
+        self.controller.bridge_available = True
+        self.controller.bridge.graph_host_modulators.return_value = {
+            "ok": True,
+            "sources": [{"source_index": 0, "name": "Random"}],
+        }
+
+        result = self.controller.get_grid_host_modulators()
+
+        self.controller.bridge.graph_host_modulators.assert_called_once_with()
+        assert result["available"] is True
+        assert result["sources"][0]["name"] == "Random"
 
     def test_context_manager(self):
         """Test context manager protocol"""
@@ -230,6 +264,50 @@ class TestBitwigOSCController(unittest.TestCase):
         self.assertEqual(params[0]["value"], 64)
         self.assertEqual(params[1]["name"], "Resonance")
         self.assertEqual(params[1]["value"], 32)
+
+    def test_grid_graph_bridge_operations(self):
+        self.controller.bridge = MagicMock()
+        self.controller.bridge_available = True
+        self.controller.bridge.graph_state.return_value = {"ok": True, "modules": []}
+        self.controller.bridge.graph_catalog.return_value = {"ok": True, "modules": []}
+        self.controller.bridge.graph_insert.return_value = {"ok": True}
+        self.controller.bridge.graph_set_parameter.return_value = {"ok": True}
+        self.controller.bridge.graph_connect.return_value = {"ok": True}
+        self.controller.bridge.graph_disconnect.return_value = {"ok": True}
+
+        assert self.controller.get_grid_graph()["modules"] == []
+        assert self.controller.search_grid_modules("sine")["modules"] == []
+        self.controller.grid_insert_module("module", 3, 2)
+        self.controller.grid_set_module_parameter("2", "TIMBRE", 0.25)
+        self.controller.grid_connect_modules("2", 0, "1", 0)
+        self.controller.grid_disconnect_module("1", 0)
+
+        self.controller.bridge.graph_catalog.assert_called_once_with("sine")
+        self.controller.bridge.graph_insert.assert_called_once_with("module", 3, 2)
+        self.controller.bridge.graph_set_parameter.assert_called_once_with(
+            "2", "TIMBRE", 0.25
+        )
+        self.controller.bridge.graph_connect.assert_called_once_with("2", 0, "1", 0)
+        self.controller.bridge.graph_disconnect.assert_called_once_with("1", 0)
+
+    def test_grid_track_bridge_operations(self):
+        self.controller.bridge = MagicMock()
+        self.controller.bridge_available = True
+        self.controller.bridge.tracks.return_value = {
+            "ok": True,
+            "tracks": [{"index": 2, "name": "Poly Grid"}],
+        }
+        self.controller.bridge.select_track.return_value = {
+            "ok": True,
+            "selection": "track",
+            "index": 2,
+        }
+
+        assert self.controller.grid_tracks()["tracks"][0]["name"] == "Poly Grid"
+        assert self.controller.grid_select_track(2)["index"] == 2
+
+        self.controller.bridge.tracks.assert_called_once_with()
+        self.controller.bridge.select_track.assert_called_once_with(2)
 
 
 if __name__ == "__main__":

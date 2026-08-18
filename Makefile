@@ -8,14 +8,13 @@ install-extension: build-extension
 		"$(HOME)/Bitwig Studio/Extensions/BitwigGridBridge.bwextension"
 
 test-python:
-	@uv run pytest tests/test_bridge.py tests/osc/test_controller.py tests/test_tools.py tests/mcp/test_server.py -q
+	@uv run pytest tests -q
 
 test: test-python
 
-check:
+check: docs-test
 	@uv run ruff check bitwig_mcp_server tests/test_bridge.py tests/osc/test_controller.py
 	@mvn -f extension/pom.xml -q package
-
 docs-test:
 	@uv run mkdocs build --strict
 

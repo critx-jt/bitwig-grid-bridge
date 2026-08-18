@@ -1,103 +1,93 @@
-# Bitwig Grid Bridge architecture
+# Architecture
 
-Bitwig Grid Bridge has two layers:
+The bridge separates the agent-facing protocol from Bitwig's host-thread API.
 
 ```text
-Agent / MCP client
-        │
-        ▼
-Optional Python MCP + OSC adapter
-        │ 127.0.0.1:8765
-        ▼
-Bitwig Grid Bridge controller extension
-        │ Bitwig Controller API 21
-        ▼
-Selected device / container / remote controls
+MCP client or example script
+          │ stdio / TCP bridge protocol
+          ▼
+Python MCP + OSC adapter (optional)
+          │ newline-delimited JSON over 127.0.0.1:8765
+          ▼
+Bitwig Grid Bridge extension
+          │ serialized host-thread calls
+          ▼
+Bitwig Controller API 21 → selected device / Grid graph
 ```
 
-The Java extension is the live-control boundary. The Python layer is an
-optional transport adapter; it prefers the bridge for selected-device
-operations and retains OSC fallback for older controls.
+## Transports
 
-## Extension responsibilities
+### Java bridge
 
-The extension:
+The extension owns the authoritative local protocol. It binds to loopback only,
+reads one JSON command per line, and emits one JSON object per request. It
+serializes Bitwig calls through the host-thread scheduler and returns structured
+errors instead of leaking host exceptions.
 
-- Owns the loopback TCP listener.
-- Subscribes to selected-device and remote-control state.
-- Schedules every Bitwig API read and write through `ControllerHost`.
-- Applies parameter batches in one host task.
-- Exposes device insertion points, device navigation, application actions, and
-  undo/redo.
-- Returns explicit capability and error responses.
+### Python MCP adapter
 
-The local protocol is newline-delimited JSON. Each request is a single command,
-and each response is one JSON object. The listener binds to `127.0.0.1` only;
-it is not a network control surface.
+The adapter exposes MCP tools over stdio. It uses the Java bridge by default and
+keeps OSC as a fallback for transport, mixer, and selected-device operations.
+The adapter does not turn OSC addresses into graph topology.
 
-## Threading and concurrency
+## Request lifecycle
 
-Socket clients run on daemon worker threads. Workers never access Bitwig API
-objects directly. They call `host.scheduleTask`, wait for completion, and
-serialize the result as JSON.
+1. MCP dispatch validates the tool name and arguments.
+2. The adapter checks mutation authorization.
+3. The bridge resolves the live selected device or catalog entry.
+4. Host-thread work runs as one scheduled operation.
+5. The bridge returns a structured success/error response.
+6. The adapter converts the response to MCP text content.
+7. The caller reads state again when the operation mutates Bitwig.
 
-This gives the bridge a simple cooperative-agent contract:
-
-- State reads may be concurrent.
-- Bitwig mutations are serialized by the host task queue.
-- A parameter batch is one mutation unit.
-- Agents still need a higher-level per-project writer/lease policy to prevent
-  semantic conflicts between independently selected devices.
-
-The Python adapter retries bridge discovery when the extension starts after the
-MCP process. A bridge error disables the bridge path for the current request
-and preserves OSC fallback.
-
-## MCP integration
-
-The Python MCP adapter currently exposes:
-
-- `get_grid_capabilities`
-- `get_selected_device_state`
-- `set_selected_device_parameters`
-- Parameter snapshot/compare/apply tools
-
-The bridge protocol additionally supports deterministic insertion, navigation,
-application actions, and undo/redo. These commands should be surfaced through
-allowlisted MCP tools only after adding project identity and expected-state
-preconditions.
+The extension's executor is the concurrency boundary. It prevents simultaneous
+Bitwig API calls, but it does not decide whether two agents have conflicting
+intent. Coordinate writers above the bridge.
 
 ## Capability boundary
 
-`graph_available: false` is intentional. The public Bitwig controller API does
-not expose:
+The Java adapter uses reflection to reach Bitwig's version-gated in-process Grid
+model because the public Controller API does not expose arbitrary Grid graph
+mutation. It reports capability failures explicitly. `graph_available: false`
+means:
 
-- Grid module instances
-- Module ports or cables
-- Grid coordinates
-- Graph serialization or mutation
+- no module or port topology is exposed;
+- no graph coordinates should be inferred;
+- no graph mutation should be attempted;
+- selected-device and exposed-control tools may still work.
 
-The bridge must not infer those structures from OSC addresses, UI selection
-state, or undocumented native `.bwproject`/`.bwpreset` bytes. Arbitrary Grid
-generation requires a supported Bitwig graph API or a separately version-gated
-serializer validated against disposable project copies.
+This boundary is intentional and should be preserved when adding features.
 
-## Recommended agent transaction envelope
+## State and identity
 
-Before adding broader mutation commands, wrap bridge operations in a
-coordinator-owned envelope containing:
+- Package UUIDs identify catalog entries installed in Bitwig.
+- Instance IDs identify modules in the current graph.
+- Port indexes are local to a module snapshot.
+- Coordinates are Grid-point units, not pixels.
+- Track indexes are live bank indexes, not durable IDs.
+- Shaping sessions and revisions are process-local.
 
-```json
-{
-  "request_id": "unique-id",
-  "project": "expected-project-name",
-  "selected_device": "expected-device-identity",
-  "expected_revision": 42,
-  "dry_run": false,
-  "operation": "set_selected_device_parameters"
-}
+All are re-read after selection, insertion, connection, navigation, and restart.
+
+## Mutations and recovery
+
+Mutating MCP tools require explicit `confirm: true` or an explicitly authorized
+`cooperative: true`. Shaping uses a revisioned draft and session undo. Graph and
+device operations can use host undo/redo. Named parameter snapshots cover
+parameter-only recovery.
+
+A mutation is not complete when a call returns `ok`. The caller must verify the
+new state and save only when the user intends the change to persist.
+
+## Persistence caveat
+
+In the current Bitwig build, coordinate-only graph moves can report success
+without persisting after reload. Persistent layout changes therefore use:
+
+```text
+snapshot → clear → insert at explicit coordinates → reconnect
+→ restore parameters → save → restart → verify
 ```
 
-The coordinator should serialize writes, reject stale selection/revision
-preconditions, report the exact changed indexes, and provide an explicit undo
-boundary for each agent transaction.
+This is a runtime behavior, not a guarantee of the native API. Keep the
+workflow behind explicit confirmation and an undo boundary.
