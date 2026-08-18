@@ -32,6 +32,12 @@ def test_get_bitwig_tools():
         "enter_device_layer",
         "exit_device_layer",
         "toggle_device_window",
+        "get_selected_device_state",
+        "set_selected_device_parameters",
+        "save_parameter_snapshot",
+        "compare_parameter_snapshots",
+        "apply_parameter_snapshot",
+
     }
 
     # Check that we have browser-related tools
@@ -68,6 +74,40 @@ def test_get_bitwig_tools():
         assert isinstance(tool.inputSchema, dict)
         assert "type" in tool.inputSchema
         assert tool.inputSchema["type"] == "object"
+
+@pytest.mark.asyncio
+async def test_execute_tool_set_selected_device_parameters():
+    """Batch parameter writes preserve integer indexes and values."""
+    controller = MagicMock()
+    controller.set_selected_device_parameters.return_value = [1, 2]
+
+    result = await execute_tool(
+        controller,
+        "set_selected_device_parameters",
+        {"parameters": {"1": 64, "2": 96}},
+    )
+
+    controller.set_selected_device_parameters.assert_called_once_with({1: 64, 2: 96})
+    assert '"changed": [1, 2]' in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_compare_parameter_snapshots():
+    """Snapshot comparison is returned as structured JSON."""
+    controller = MagicMock()
+    controller.compare_parameter_snapshots.return_value = {
+        "identical": False,
+        "changed": [{"index": 1, "before": 64, "after": 96}],
+    }
+
+    result = await execute_tool(
+        controller,
+        "compare_parameter_snapshots",
+        {"first": "dry", "second": "bright"},
+    )
+
+    controller.compare_parameter_snapshots.assert_called_once_with("dry", "bright")
+    assert '"identical": false' in result[0].text
 
 
 @pytest.mark.asyncio

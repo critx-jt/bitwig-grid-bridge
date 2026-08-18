@@ -9,6 +9,8 @@ import socket
 import time
 from typing import Any, Dict, List, Optional
 
+from bitwig_mcp_server.bridge import GridBridgeClient, GridBridgeError
+
 from .client import BitwigOSCClient
 from .error_handler import ErrorHandler
 from .exceptions import (
@@ -30,8 +32,11 @@ class BitwigOSCController:
         ip: str = "127.0.0.1",
         send_port: int = 8000,
         receive_port: int = 9000,
-        connection_timeout: float = 10.0,  # Increased timeout for Bitwig operations
-        reconnect_attempts: int = 5,  # More reconnection attempts
+        connection_timeout: float = 10.0,
+        reconnect_attempts: int = 5,
+        bridge_enabled: bool = False,
+        bridge_host: str = "127.0.0.1",
+        bridge_port: int = 8765,
     ):
         """Initialize the controller
 
@@ -60,38 +65,59 @@ class BitwigOSCController:
         self.connected = False
         self.last_refresh = 0.0
         self.connection_attempts = 0
+        # In-memory snapshots are intentionally process-local.  They provide
+        # safe comparison/apply workflows without pretending OSC exposes a
+        # stable Grid graph or persistent device identifiers.
+        self.parameter_snapshots: Dict[str, Dict[str, Any]] = {}
+        self.bridge: GridBridgeClient | None = (
+            GridBridgeClient(bridge_host, bridge_port) if bridge_enabled else None
+        )
+        self.bridge_available = False
+
 
     def start(self) -> None:
-        """Start the controller
+        """Start the OSC controller.
+
+        OSC over UDP is connectionless: successfully binding the receive
+        socket is the only connection check available at startup.  Bitwig's
+        built-in OSC controller does not acknowledge ``/refresh`` requests,
+        so waiting for a response here makes a healthy setup time out.
 
         Raises:
-            ConnectionError: If unable to connect to Bitwig
+            ConnectionError: If the local OSC receive socket cannot start.
         """
         try:
-            # Start the OSC server
+            # Start the OSC server before sending the initial state request so
+            # any unsolicited state messages are captured.
             self.server.start()
-
-            # Wait briefly for server to start
             time.sleep(0.1)
 
-            # Try to connect to Bitwig with timeout
-            self._connect_with_timeout()
+            # This is best-effort initialization, not a handshake.  Bitwig
+            # may ignore /refresh while still accepting all control messages.
+            self.client.refresh()
+            if self.bridge is not None:
+                self.bridge_available = self.bridge.ping()
+                if self.bridge_available:
+                    logger.info("Bitwig Grid bridge detected; selected-device operations will prefer it")
+                else:
+                    logger.info("Bitwig Grid bridge unavailable; using OSC fallback")
 
-            # Mark as ready
+
             self.ready = True
             self.connected = True
             self.connection_attempts = 0
             self.error_handler.record_success()
 
             logger.info(
-                f"OSC controller connected to Bitwig at {self.ip}:{self.send_port}"
+                f"OSC controller listening for Bitwig at "
+                f"{self.ip}:{self.receive_port}; sending to "
+                f"{self.ip}:{self.send_port}"
             )
 
         except Exception as e:
             self.ready = False
             self.connected = False
 
-            # Clean up
             try:
                 self.server.stop()
             except Exception:
@@ -436,6 +462,166 @@ class BitwigOSCController:
                 params.append(param_info)
 
         return params
+
+    def _ensure_bridge_available(self) -> bool:
+        """Reconnect to a bridge that appeared after controller startup."""
+        if self.bridge is None:
+            return False
+        if self.bridge_available:
+            return True
+        self.bridge_available = self.bridge.ping()
+        if self.bridge_available:
+            logger.info("Bitwig Grid bridge became available")
+        return self.bridge_available
+
+    def get_selected_device_state(self) -> Dict[str, Any]:
+        """Return observable state, preferring the in-process Bitwig bridge."""
+        if self._ensure_bridge_available():
+            try:
+                payload = self.bridge.state()
+                parameters = [
+                    {
+                        **parameter,
+                        "value": parameter["value"] * 128
+                        if isinstance(parameter.get("value"), (int, float))
+                        else parameter.get("value"),
+                    }
+                    for parameter in payload.get("parameters", [])
+                ]
+                return {
+                    "available": bool(payload.get("exists")),
+                    "graph_available": bool(payload.get("graph_available", False)),
+                    "bridge": True,
+                    "properties": {
+                        "name": payload.get("name"),
+                        "device_type": payload.get("device_type"),
+                    },
+                    "parameters": parameters,
+                }
+            except GridBridgeError as error:
+                logger.warning("Bitwig Grid bridge read failed; falling back to OSC: %s", error)
+                self.bridge_available = False
+
+        params = self.get_device_params()
+        device_properties: Dict[str, Any] = {}
+        prefix = "/device/"
+        for address, value in self.server.received_messages.items():
+            if address.startswith(prefix) and "/param/" not in address:
+                property_name = address[len(prefix) :]
+                if property_name not in {"exists"}:
+                    device_properties[property_name] = value
+
+        return {
+            "available": True,
+            "graph_available": False,
+            "bridge": False,
+            "properties": device_properties,
+            "parameters": params,
+        }
+    def get_grid_capabilities(self) -> Dict[str, Any]:
+        """Return bridge capabilities and selected-device inspection data."""
+        if self.bridge is None:
+            return {"available": False, "bridge": False, "graph_available": False}
+        try:
+            capabilities = self.bridge.capabilities()
+            inspection = self.bridge.inspect()
+            self.bridge_available = True
+            return {
+                "available": True,
+                "bridge": True,
+                "capabilities": capabilities,
+                "inspection": inspection,
+            }
+        except GridBridgeError as error:
+            self.bridge_available = False
+            return {
+                "available": False,
+                "bridge": False,
+                "graph_available": False,
+                "error": str(error),
+            }
+
+
+    def set_selected_device_parameters(
+        self, parameters: Dict[int, float]
+    ) -> List[int]:
+        """Set multiple selected-device parameters and return changed indexes."""
+        if not parameters:
+            raise ValueError("At least one parameter is required")
+
+        for index, value in parameters.items():
+            if not isinstance(index, int) or index < 1:
+                raise ValueError("Parameter indexes must be positive integers")
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise ValueError(f"Invalid value for parameter {index}")
+            if value < 0 or value > 128:
+                raise ValueError(f"Value for parameter {index} must be between 0 and 128")
+
+        if self._ensure_bridge_available():
+            try:
+                self.bridge.set_parameters_atomic(parameters)
+                return list(parameters)
+            except GridBridgeError as error:
+                logger.warning("Bitwig Grid bridge write failed; falling back to OSC: %s", error)
+                self.bridge_available = False
+
+        for index, value in parameters.items():
+            self.client.set_device_parameter(index, value)
+        return list(parameters)
+
+
+
+    def save_parameter_snapshot(self, name: str) -> Dict[str, Any]:
+        """Capture the currently observable selected-device parameter state."""
+        if not name or not isinstance(name, str):
+            raise ValueError("Snapshot name must be a non-empty string")
+        state = self.get_selected_device_state()
+        snapshot = {
+            "name": name,
+            "parameters": {
+                str(parameter["index"]): parameter.get("value")
+                for parameter in state["parameters"]
+                if "value" in parameter
+            },
+        }
+        self.parameter_snapshots[name] = snapshot
+        return snapshot
+
+    def compare_parameter_snapshots(self, first: str, second: str) -> Dict[str, Any]:
+        """Compare two saved snapshots by parameter index."""
+        try:
+            left = self.parameter_snapshots[first]["parameters"]
+            right = self.parameter_snapshots[second]["parameters"]
+        except KeyError as exc:
+            raise ValueError(f"Unknown parameter snapshot: {exc.args[0]}") from exc
+
+        indexes = sorted(set(left) | set(right), key=int)
+        changed = [
+            {
+                "index": int(index),
+                "before": left.get(index),
+                "after": right.get(index),
+            }
+            for index in indexes
+            if left.get(index) != right.get(index)
+        ]
+        return {
+            "first": first,
+            "second": second,
+            "changed": changed,
+            "identical": not changed,
+        }
+
+    def apply_parameter_snapshot(self, name: str) -> List[int]:
+        """Apply a saved parameter snapshot to the selected device."""
+        try:
+            values = self.parameter_snapshots[name]["parameters"]
+        except KeyError as exc:
+            raise ValueError(f"Unknown parameter snapshot: {exc.args[0]}") from exc
+        return self.set_selected_device_parameters(
+            {int(index): value for index, value in values.items() if value is not None}
+        )
+
 
     def get_status(self) -> Dict[str, Any]:
         """Get controller status information

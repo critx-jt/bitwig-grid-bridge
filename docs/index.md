@@ -1,8 +1,23 @@
-# bitwig-mcp-server
+# Bitwig Grid Bridge
 
-[![Release](https://img.shields.io/github/v/release/jxstanford/bitwig-mcp-server)](https://img.shields.io/github/v/release/jxstanford/bitwig-mcp-server)
-[![Build status](https://img.shields.io/github/actions/workflow/status/jxstanford/bitwig-mcp-server/main.yml?branch=main)](https://github.com/jxstanford/bitwig-mcp-server/actions/workflows/main.yml?query=branch%3Amain)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/jxstanford/bitwig-mcp-server)](https://img.shields.io/github/commit-activity/m/jxstanford/bitwig-mcp-server)
-[![License](https://img.shields.io/github/license/jxstanford/bitwig-mcp-server)](https://img.shields.io/github/license/jxstanford/bitwig-mcp-server)
+Bitwig Grid Bridge is a Bitwig Studio controller extension and local
+automation protocol for agent-driven Grid workflows.
 
-MCP server for Bitwig Studio.
+## What it exposes
+
+- Selected-device and Grid-container inspection
+- Eight exposed Bitwig remote controls
+- Atomic host-thread parameter batches
+- Device insertion by UUID
+- Device navigation and project history
+- Undo/redo and application actions
+
+The public Bitwig controller API does not expose Grid module graphs, ports,
+cables, or coordinates. The bridge reports `graph_available: false` rather than
+guessing those structures.
+
+## Start here
+
+- [Installation](installation.md)
+- [Architecture](architecture.md)
+- Showcase projects: `examples/` in the repository root

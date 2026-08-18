@@ -4,6 +4,7 @@ Bitwig MCP Tools
 This module provides MCP tools for controlling Bitwig Studio.
 """
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -174,6 +175,68 @@ def get_bitwig_tools() -> List[Tool]:
                 "required": ["track_index"],
             },
         ),
+        Tool(
+            name="get_selected_device_state",
+            description=(
+                "Read the currently selected device and its observable parameters. "
+                "This exposes parameter control only; Grid module topology is unavailable."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="get_grid_capabilities",
+            description=(
+                "Inspect bridge capabilities and selected-device container flags. "
+                "Use this before attempting automated Grid reconstruction."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="set_selected_device_parameters",
+            description="Set multiple parameters on the currently selected device.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "parameters": {
+                        "type": "object",
+                        "description": "Map parameter indexes to values in the 0-128 OSC range.",
+                        "additionalProperties": {"type": "number"},
+                    }
+                },
+                "required": ["parameters"],
+            },
+        ),
+        Tool(
+            name="save_parameter_snapshot",
+            description="Save observable parameters of the selected device in memory.",
+            inputSchema={
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        ),
+        Tool(
+            name="compare_parameter_snapshots",
+            description="Compare two in-memory selected-device parameter snapshots.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "first": {"type": "string"},
+                    "second": {"type": "string"},
+                },
+                "required": ["first", "second"],
+            },
+        ),
+        Tool(
+            name="apply_parameter_snapshot",
+            description="Apply an in-memory parameter snapshot to the selected device.",
+            inputSchema={
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        ),
+
         Tool(
             name="set_device_parameter",
             description="Set value of a device parameter",
@@ -521,6 +584,53 @@ async def execute_tool(
 
             controller.client.toggle_track_mute(track_index)
             return [TextContent(type="text", text=f"Track {track_index} mute toggled")]
+
+        elif name == "get_selected_device_state":
+            state = controller.get_selected_device_state()
+            return [TextContent(type="text", text=json.dumps(state, sort_keys=True))]
+
+        elif name == "get_grid_capabilities":
+            capabilities = controller.get_grid_capabilities()
+            return [TextContent(type="text", text=json.dumps(capabilities, sort_keys=True))]
+
+        elif name == "set_selected_device_parameters":
+            parameters = arguments.get("parameters")
+            if not isinstance(parameters, dict) or not parameters:
+                raise ValueError("parameters must be a non-empty object")
+            normalized = {}
+            for index, value in parameters.items():
+                try:
+                    normalized[int(index)] = value
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("Parameter indexes must be integers") from exc
+            changed = controller.set_selected_device_parameters(normalized)
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps({"changed": changed}, sort_keys=True),
+                )
+            ]
+
+        elif name == "save_parameter_snapshot":
+            snapshot = controller.save_parameter_snapshot(arguments.get("name", ""))
+            return [TextContent(type="text", text=json.dumps(snapshot, sort_keys=True))]
+
+        elif name == "compare_parameter_snapshots":
+            comparison = controller.compare_parameter_snapshots(
+                arguments.get("first", ""), arguments.get("second", "")
+            )
+            return [
+                TextContent(type="text", text=json.dumps(comparison, sort_keys=True))
+            ]
+
+        elif name == "apply_parameter_snapshot":
+            changed = controller.apply_parameter_snapshot(arguments.get("name", ""))
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps({"changed": changed}, sort_keys=True),
+                )
+            ]
 
         elif name == "set_device_parameter":
             param_index = arguments.get("param_index")

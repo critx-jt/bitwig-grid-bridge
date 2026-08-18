@@ -1,170 +1,120 @@
-# Bitwig MCP Server
+# Bitwig Grid Bridge
 
-[![Release](https://img.shields.io/github/v/release/jxstanford/bitwig-mcp-server)](https://img.shields.io/github/v/release/jxstanford/bitwig-mcp-server)
-[![Build status](https://img.shields.io/github/actions/workflow/status/jxstanford/bitwig-mcp-server/main.yml?branch=main)](https://github.com/jxstanford/bitwig-mcp-server/actions/workflows/main.yml?query=branch%3Amain)
-[![codecov](https://codecov.io/gh/jxstanford/bitwig-mcp-server/branch/main/graph/badge.svg)](https://codecov.io/gh/jxstanford/bitwig-mcp-server)
-[![License](https://img.shields.io/github/license/jxstanford/bitwig-mcp-server)](https://img.shields.io/github/license/jxstanford/bitwig-mcp-server)
+Bitwig Grid Bridge is a Bitwig Studio controller extension and automation
+toolkit for agents. It exposes a small, deterministic local API for selected
+devices, Grid containers, remote controls, device insertion, application
+actions, and undo/redo.
 
-A Model Context Protocol (MCP) server for Bitwig Studio that allows Claude to control your DAW.
+The repository is intentionally bridge-first. The Python MCP server remains as
+a companion adapter for agent clients; the Bitwig extension is the source of
+truth for host-thread scheduling and live device control.
 
-**Warning! This is a work in progress. Documentation and implementation may be out of sync, and
-not all functionality may work as expected.**
+## Supported automation surface
 
-## Features
+- Inspect the selected device and container slots.
+- Read the eight remote controls exposed by Bitwig.
+- Apply multiple remote-control values in one host-thread batch.
+- Navigate selected devices and parent containers.
+- Insert Bitwig devices by UUID.
+- Invoke allowlisted Bitwig application actions.
+- Inspect project history and use undo/redo.
+- Connect multiple local clients without concurrent Bitwig API access.
 
-- **AI-Powered Music Production**: Control Bitwig Studio with Claude via MCP
-- **Transport Controls**: Play, stop, and set tempo
-- **Mixer Controls**: Adjust volume, pan, and mute/unmute tracks
-- **Device Controls**: Manipulate device parameters
-- **Project Information**: Access track and device information
-- **Templates and Prompts**: Pre-configured workflows for common tasks
+The bridge does **not** expose Grid modules, ports, cables, coordinates, or
+arbitrary graph mutation. `graph_available: false` is intentional. Do not
+infer a Grid graph from OSC addresses or edit native `.bwproject`/`.bwpreset`
+binary data in a live project.
 
-## Installation
+## Requirements
 
-### Prerequisites
+- Bitwig Studio with controller API 21 or newer.
+- Java 21 or newer and Maven.
+- Python 3.10+ and `uv` for the optional MCP adapter.
 
-- Python 3.10+
-- [Bitwig Studio](https://www.bitwig.com/) 5.2+
-- [Driven by Moss](https://www.mossgrabers.de/Software/Bitwig/Bitwig.html#5.2) 5.2+
-- [Claude Desktop](https://claude.ai/download) app with MCP support
-
-### Install from GitHub
+## Install the Bitwig extension
 
 ```bash
-# Clone the repository
-git clone https://github.com/jxstanford/bitwig-mcp-server.git
-cd bitwig-mcp-server
+git clone https://github.com/critx-jt/bitwig-grid-bridge.git
+cd bitwig-grid-bridge
 
-# Install dependencies
+mvn -f extension/pom.xml package
+cp extension/target/bitwig-grid-bridge-0.1.0.jar \
+  "$HOME/Bitwig Studio/Extensions/BitwigGridBridge.bwextension"
+```
+
+Restart Bitwig, then enable **Bitwig Grid Bridge** under
+**Settings > Controllers**. The extension listens only on
+`127.0.0.1:8765`; it does not claim MIDI ports or external hardware.
+
+## Run the optional MCP adapter
+
+The existing Python adapter translates MCP calls to the bridge and retains OSC
+fallback support for controls that are not bridge-backed.
+
+```bash
 uv sync
+BITWIG_MCP_GRID_BRIDGE_ENABLED=true python -m bitwig_mcp_server
 ```
 
-## Usage
+The default bridge settings are:
 
-### 1. Configure Bitwig Studio
-
-1. If necessary, add a virtual MIDI device for OSC
-2. Follow Driven by Moss installation instructions for Bitwig 5.2+
-3. Open or restart Bitwig Studio
-4. Go to Settings > Controllers
-5. Click "Add Controller" and select "Open Sound Control" and "OSC"
-6. Configure the receive port (default: 8000) and send port (default: 9000)
-7. Enable the controller
-
-### 2. Run the Bitwig MCP Server
-
-```bash
-# Run the server with default settings
-python -m bitwig_mcp_server
-
-# Or run with custom settings
-python -m bitwig_mcp_server --host 127.0.0.1 --send-port 8000 --receive-port 9000 --transport stdio --debug
+```text
+BITWIG_MCP_GRID_BRIDGE_HOST=127.0.0.1
+BITWIG_MCP_GRID_BRIDGE_PORT=8765
 ```
 
-### 3. Add to Claude Desktop
+## Showcase projects
+
+The checked-in projects under [`examples/`](examples/) are disposable Bitwig
+fixtures:
+
+- `polygrid-remote-controls` demonstrates selected Poly Grid inspection and
+  reversible remote-control sweeps.
+- `polygrid-fx-chain` demonstrates deterministic FX Grid insertion and undo.
+
+Open one project in Bitwig, enable the extension, then run:
 
 ```bash
-# Install the server in Claude Desktop
-mcp install bitwig_mcp_server/__main__.py
+python examples/automation/grid_bridge_demo.py inspect
+python examples/automation/grid_bridge_demo.py sweep --index 2 --duration 4
+python examples/automation/grid_bridge_demo.py insert-fx-grid --position after
 ```
 
-Then open Claude Desktop and select the Bitwig MCP Server from the MCP Servers dropdown.
+The sweep restores the original value by default. Device insertion is also
+undone by default; pass `--keep` to commit either operation. Use the copied
+example projects rather than an active music project.
 
-## Available Tools
+## Repository layout
 
-The Bitwig MCP Server provides the following tools:
-
-### Transport Controls
-
-- **play**: Toggle play/pause state or set it to a specific state
-- **stop**: Stop playback
-- **set_tempo**: Set the tempo in beats per minute
-
-### Track Controls
-
-- **set_track_volume**: Set track volume (0-128)
-- **set_track_pan**: Set track pan position (0-128)
-- **set_track_mute**: Mute, unmute, or toggle mute state for a track
-
-### Device Controls
-
-- **set_device_parameter**: Set a device parameter value (0-128)
-
-### Information
-
-- **get_project_info**: Get information about the current Bitwig project
-- **get_tracks_info**: Get information about all tracks in the project
-- **get_track_info**: Get information about a specific track
-- **get_device_parameters**: Get information about the selected device parameters
-
-## Available Resources
-
-- **bitwig://project/info**: Project information
-- **bitwig://transport**: Transport state
-- **bitwig://tracks**: All tracks in the project
-- **bitwig://track/{index}**: Specific track information
-- **bitwig://devices**: Active devices
-- **bitwig://device/parameters**: Parameters for the selected device
-
-## Example Prompts
-
-- **setup_mixing_session**: Set up a new mixing session with default settings
-- **create_track_template**: Create a track template with specific devices and settings
-- **optimize_track_settings**: Get recommendations for optimizing track settings
-
-## Configuration
-
-The server can be configured through:
-
-1. Environment variables or `.env` file
-2. Command line arguments
-3. Settings in `bitwig_mcp_server/settings.py`
-
-### Command Line Arguments
-
-```bash
-python -m bitwig_mcp_server --help
+```text
+extension/                 Bitwig controller extension and local protocol
+examples/                  Disposable Bitwig projects and automation demos
+bitwig_mcp_server/         Optional MCP/OSC adapter and bridge client
+tests/                     Python adapter and protocol regression tests
+docs/                      Architecture and installation notes
 ```
 
 ## Development
 
-### Environment Setup
-
 ```bash
-# Install dev dependencies
-uv sync
+# Build the extension
+mvn -f extension/pom.xml package
 
-# Install pre-commit hooks
-uv run pre-commit install
+# Run focused Python checks
+uv run pytest tests/test_bridge.py tests/osc/test_controller.py -q
+uv run ruff check bitwig_mcp_server tests/test_bridge.py tests/osc/test_controller.py
+
+# Build documentation
+uv run mkdocs build --strict
 ```
 
-### Running Tests
+## Design boundary
 
-```bash
-# Run unit tests (no Bitwig required)
-make test
+For cooperative agents, allow concurrent reads but serialize mutations through
+one per-project writer. Add selected-device identity, expected-state revisions,
+idempotency keys, dry-run responses, and explicit undo boundaries before
+exposing more mutation commands.
 
-# Run all tests including Bitwig integration tests
-# (requires Bitwig Studio running with OSC enabled)
-make test-all
-```
-
-### Code Quality
-
-```bash
-# Run code quality checks
-make check
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgements
-
-Thanks to Jürgen Moßgraber for publishing the [Driven by Moss](https://www.mossgrabers.de/Software/Bitwig/Bitwig.html#5.2) package. This package leverages that package to interact
-with Bitwig.
+Arbitrary Grid graph generation requires a supported Bitwig graph API or a
+separate, version-gated serializer validated against disposable project
+copies. Until then, use trusted example projects and preset/template workflows.

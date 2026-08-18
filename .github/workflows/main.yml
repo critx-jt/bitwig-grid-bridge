@@ -1,4 +1,4 @@
-name: Main
+name: Bridge CI
 
 on:
   push:
@@ -25,6 +25,22 @@ jobs:
       - name: Run checks
         run: make check
 
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build Bitwig extension
+        run: mvn -B -f extension/pom.xml package
   tests-and-type-check:
     runs-on: ubuntu-latest
     strategy:

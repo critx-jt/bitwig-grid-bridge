@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     bitwig_receive_port: int = Field(
         default=9000, description="Port to receive OSC messages from Bitwig"
     )
+    grid_bridge_enabled: bool = Field(
+        default=True, description="Prefer the standalone Bitwig Grid bridge when available"
+    )
+    grid_bridge_host: str = Field(
+        default="127.0.0.1", description="Standalone Bitwig Grid bridge host"
+    )
+    grid_bridge_port: int = Field(
+        default=8765, description="Standalone Bitwig Grid bridge port"
+    )
+
 
     # MCP settings
     mcp_port: int = Field(

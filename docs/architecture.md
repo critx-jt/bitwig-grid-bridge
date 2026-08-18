@@ -1,191 +1,103 @@
-# Bitwig MCP Server Architecture
+# Bitwig Grid Bridge architecture
 
-This document outlines the architecture of the Bitwig MCP Server, explaining how it bridges Claude's Model Context Protocol (MCP) with Bitwig Studio's OSC API.
+Bitwig Grid Bridge has two layers:
 
-## Overview
-
-The Bitwig MCP Server acts as a translation layer between:
-
-1. **Claude Desktop** using the Model Context Protocol (MCP)
-2. **Bitwig Studio** using Open Sound Control (OSC)
-
-```
-┌───────────────┐      ┌───────────────────────┐      ┌───────────────┐
-│               │      │                       │      │               │
-│     Claude    │◄────►│  Bitwig MCP Server    │◄────►│    Bitwig     │
-│    Desktop    │ MCP  │                       │ OSC  │    Studio     │
-│               │      │                       │      │               │
-└───────────────┘      └───────────────────────┘      └───────────────┘
+```text
+Agent / MCP client
+        │
+        ▼
+Optional Python MCP + OSC adapter
+        │ 127.0.0.1:8765
+        ▼
+Bitwig Grid Bridge controller extension
+        │ Bitwig Controller API 21
+        ▼
+Selected device / container / remote controls
 ```
 
-## Architecture Components
+The Java extension is the live-control boundary. The Python layer is an
+optional transport adapter; it prefers the bridge for selected-device
+operations and retains OSC fallback for older controls.
 
-### Core Components
+## Extension responsibilities
 
-The server architecture consists of the following core components:
+The extension:
 
-1. **BitwigFastMCP** - Main FastMCP server implementation
+- Owns the loopback TCP listener.
+- Subscribes to selected-device and remote-control state.
+- Schedules every Bitwig API read and write through `ControllerHost`.
+- Applies parameter batches in one host task.
+- Exposes device insertion points, device navigation, application actions, and
+  undo/redo.
+- Returns explicit capability and error responses.
 
-   - Registers tools, resources, and prompts
-   - Manages server lifecycle
-   - Handles translation between MCP and OSC
+The local protocol is newline-delimited JSON. Each request is a single command,
+and each response is one JSON object. The listener binds to `127.0.0.1` only;
+it is not a network control surface.
 
-2. **OSC Communication Layer**
+## Threading and concurrency
 
-   - **BitwigOSCClient** - Sends OSC messages to Bitwig
-   - **BitwigOSCServer** - Receives OSC messages from Bitwig
-   - **BitwigOSCController** - Coordinates bidirectional communication
+Socket clients run on daemon worker threads. Workers never access Bitwig API
+objects directly. They call `host.scheduleTask`, wait for completion, and
+serialize the result as JSON.
 
-3. **MCP Integration**
-   - **Resource Management** - Exposes Bitwig resources via MCP
-   - **Tool Integration** - Provides Bitwig control tools for Claude
-   - **Prompt Templates** - Offers pre-configured workflows for common tasks
+This gives the bridge a simple cooperative-agent contract:
 
-### Architectural Patterns
+- State reads may be concurrent.
+- Bitwig mutations are serialized by the host task queue.
+- A parameter batch is one mutation unit.
+- Agents still need a higher-level per-project writer/lease policy to prevent
+  semantic conflicts between independently selected devices.
 
-The server follows these architectural patterns:
+The Python adapter retries bridge discovery when the extension starts after the
+MCP process. A bridge error disables the bridge path for the current request
+and preserves OSC fallback.
 
-1. **Hexagonal Architecture (Ports and Adapters)**
+## MCP integration
 
-   - Core domain (Bitwig control model)
-   - Input ports (MCP server interface)
-   - Output ports (OSC client interface)
-   - Adapters (FastMCP and OSC implementations)
+The Python MCP adapter currently exposes:
 
-2. **Dependency Injection**
-   - Components can be tested in isolation
-   - OSC controller is injected into the FastMCP server
-   - Loose coupling between modules
+- `get_grid_capabilities`
+- `get_selected_device_state`
+- `set_selected_device_parameters`
+- Parameter snapshot/compare/apply tools
 
-## Translation Layer
+The bridge protocol additionally supports deterministic insertion, navigation,
+application actions, and undo/redo. These commands should be surfaced through
+allowlisted MCP tools only after adding project identity and expected-state
+preconditions.
 
-The server translates between these two protocols:
+## Capability boundary
 
-### MCP to OSC Translation
+`graph_available: false` is intentional. The public Bitwig controller API does
+not expose:
 
-When Claude calls an MCP tool:
+- Grid module instances
+- Module ports or cables
+- Grid coordinates
+- Graph serialization or mutation
 
-1. The tool handler is invoked with parameters
-2. Parameters are validated
-3. The handler calls appropriate OSC client methods
-4. OSC messages are sent to Bitwig
-5. Results are formatted as MCP responses
+The bridge must not infer those structures from OSC addresses, UI selection
+state, or undocumented native `.bwproject`/`.bwpreset` bytes. Arbitrary Grid
+generation requires a supported Bitwig graph API or a separately version-gated
+serializer validated against disposable project copies.
 
-### OSC to MCP Translation
+## Recommended agent transaction envelope
 
-When reading Bitwig state:
+Before adding broader mutation commands, wrap bridge operations in a
+coordinator-owned envelope containing:
 
-1. OSC client sends query messages
-2. OSC server receives response messages
-3. Messages are parsed and state is extracted
-4. State is formatted as MCP resource content
-5. Claude receives the formatted resource
-
-## Dependencies
-
-The server depends on the following libraries:
-
-1. **MCP Python SDK** (`mcp` package)
-
-   - FastMCP server implementation
-   - Client and server session handling
-   - Tool, resource, and prompt models
-
-2. **python-osc**
-
-   - OSC message formatting and parsing
-   - UDP transport for OSC messages
-
-3. **Pydantic**
-   - Data validation and settings management
-   - Type checking and conversion
-
-## Flow Diagrams
-
-### Tool Execution Flow
-
-```
-┌───────────┐    ┌─────────────┐    ┌───────────────┐    ┌──────────────┐    ┌─────────┐
-│           │    │             │    │               │    │              │    │         │
-│  Claude   │───►│  FastMCP    │───►│  OSC Client   │───►│  OSC Message │───►│ Bitwig  │
-│           │    │  Tool       │    │  Method       │    │              │    │         │
-│           │    │             │    │               │    │              │    │         │
-└───────────┘    └─────────────┘    └───────────────┘    └──────────────┘    └─────────┘
-       ▲                                                                          │
-       │                                                                          │
-       │               ┌─────────────┐    ┌───────────────┐                      │
-       │               │             │    │               │                      │
-       └───────────────┤  Response   │◄───┤  OSC Server   │◄─────────────────────┘
-                       │  Formatter  │    │  Listener     │
-                       │             │    │               │
-                       └─────────────┘    └───────────────┘
+```json
+{
+  "request_id": "unique-id",
+  "project": "expected-project-name",
+  "selected_device": "expected-device-identity",
+  "expected_revision": 42,
+  "dry_run": false,
+  "operation": "set_selected_device_parameters"
+}
 ```
 
-### Resource Access Flow
-
-```
-┌───────────┐    ┌─────────────┐    ┌───────────────┐    ┌──────────────┐    ┌─────────┐
-│           │    │             │    │               │    │              │    │         │
-│  Claude   │───►│  FastMCP    │───►│  OSC Client   │───►│  OSC Message │───►│ Bitwig  │
-│           │    │  Resource   │    │  Query        │    │              │    │         │
-│           │    │             │    │               │    │              │    │         │
-└───────────┘    └─────────────┘    └───────────────┘    └──────────────┘    └─────────┘
-       ▲                                                                          │
-       │                                                                          │
-       │               ┌─────────────┐    ┌───────────────┐                      │
-       │               │             │    │               │                      │
-       └───────────────┤  Resource   │◄───┤  OSC Server   │◄─────────────────────┘
-                       │  Formatter  │    │  Response     │
-                       │             │    │               │
-                       └─────────────┘    └───────────────┘
-```
-
-## Error Handling
-
-The server implements the following error handling strategies:
-
-1. **Parameter Validation**
-
-   - Type checking and range validation for all parameters
-   - Detailed error messages for invalid inputs
-
-2. **OSC Communication Errors**
-
-   - Timeouts for message sending and receiving
-   - Error reporting for connection issues
-
-3. **Bitwig State Validation**
-   - Checking for object existence before operations
-   - Graceful degradation for missing features
-
-## Security Considerations
-
-1. **Network Security**
-
-   - Local host-only connections by default
-   - No external access to OSC ports
-
-2. **Input Validation**
-   - All parameters are validated before use
-   - Protection against invalid inputs
-
-## Future Extensions
-
-The architecture is designed to be extensible for future features:
-
-1. **Additional Bitwig Features**
-
-   - Track creation and management
-   - Arrangement and editing
-   - Plugin parameter control
-
-2. **Enhanced Workflows**
-
-   - Audio analysis and recommendations
-   - Project management tools
-   - Music composition assistance
-
-3. **User Interface**
-   - Web-based control panel
-   - Status monitoring dashboard
-   - Configuration management
+The coordinator should serialize writes, reject stale selection/revision
+preconditions, report the exact changed indexes, and provide an explicit undo
+boundary for each agent transaction.

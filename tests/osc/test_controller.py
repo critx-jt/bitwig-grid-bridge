@@ -39,6 +39,82 @@ class TestBitwigOSCController(unittest.TestCase):
         # Test stop
         self.controller.stop()
         self.mock_server.stop.assert_called_once()
+    def test_start_does_not_require_refresh_response(self):
+        """Starting succeeds when Bitwig does not acknowledge /refresh."""
+        self.mock_server.received_messages = {}
+
+        self.controller.start()
+
+        self.assertTrue(self.controller.ready)
+        self.assertTrue(self.controller.connected)
+        self.mock_client.refresh.assert_called_once()
+
+        self.controller.stop()
+
+    def test_parameter_snapshots_compare_and_apply(self):
+        """Snapshots compare values and apply only stored parameters."""
+        self.controller.refresh = MagicMock(return_value=True)
+        self.mock_server.received_messages = {
+            "/device/exists": 1,
+            "/device/param/1/exists": 1,
+            "/device/param/1/name": "Cutoff",
+            "/device/param/1/value": 64,
+            "/device/param/2/exists": 1,
+            "/device/param/2/name": "Resonance",
+            "/device/param/2/value": 32,
+        }
+
+        self.controller.save_parameter_snapshot("before")
+        self.mock_server.received_messages["/device/param/1/value"] = 96
+        self.controller.save_parameter_snapshot("after")
+
+        comparison = self.controller.compare_parameter_snapshots("before", "after")
+        assert comparison["changed"] == [{"index": 1, "before": 64, "after": 96}]
+
+        self.controller.apply_parameter_snapshot("before")
+        self.mock_client.set_device_parameter.assert_any_call(1, 64)
+        self.mock_client.set_device_parameter.assert_any_call(2, 32)
+
+    def test_bridge_state_is_preferred_when_available(self):
+        """Selected-device reads use the Bitwig-side bridge when connected."""
+        self.controller.bridge = MagicMock()
+        self.controller.bridge_available = True
+        self.controller.bridge.state.return_value = {
+            "exists": True,
+            "graph_available": False,
+            "name": "Poly Grid",
+            "device_type": "Instrument",
+            "parameters": [
+                {"index": 1, "exists": True, "name": "Cutoff", "value": 0.5}
+            ],
+        }
+
+        state = self.controller.get_selected_device_state()
+
+        self.controller.bridge.state.assert_called_once_with()
+        assert state["properties"]["name"] == "Poly Grid"
+        assert state["parameters"][0]["value"] == 64
+
+    def test_bridge_recovers_after_startup(self):
+        """Selected-device reads reconnect when Bitwig starts later."""
+        self.controller.bridge = MagicMock()
+        self.controller.bridge_available = False
+        self.controller.bridge.ping.return_value = True
+        self.controller.bridge.state.return_value = {
+            "exists": True,
+            "graph_available": False,
+            "name": "Poly Grid",
+            "device_type": "Instrument",
+            "parameters": [],
+        }
+
+        state = self.controller.get_selected_device_state()
+
+        self.controller.bridge.ping.assert_called_once_with()
+        self.controller.bridge.state.assert_called_once_with()
+        assert self.controller.bridge_available is True
+        assert state["properties"]["name"] == "Poly Grid"
+
 
     def test_context_manager(self):
         """Test context manager protocol"""

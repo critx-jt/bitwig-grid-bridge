@@ -1,14 +1,16 @@
-site_name: bitwig-mcp-server
-repo_url: https://github.com/jxstanford/bitwig-mcp-server
-site_url: https://jxstanford.github.io/bitwig-mcp-server
-site_description: MCP server for Bitwig Studio.
-site_author: John Stanford
+site_name: Bitwig Grid Bridge
+repo_url: https://github.com/critx-jt/bitwig-grid-bridge
+site_url: https://critx-jt.github.io/bitwig-grid-bridge
+site_description: Bitwig Studio bridge extension and Grid automation toolkit.
+site_author: critx-jt
 edit_uri: edit/main/docs/
-repo_name: jxstanford/bitwig-mcp-server
-copyright: Maintained by <a href="https://jxstanford.com">jxstanford</a>.
+repo_name: critx-jt/bitwig-grid-bridge
+copyright: Maintained by <a href="https://github.com/critx-jt">critx-jt</a>.
 
 nav:
   - Home: index.md
+  - Installation: installation.md
+  - Architecture: architecture.md
   - Modules: modules.md
 plugins:
   - search
@@ -41,7 +43,7 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/jxstanford/bitwig-mcp-server
+      link: https://github.com/critx-jt/bitwig-grid-bridge
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/bitwig-mcp-server
 

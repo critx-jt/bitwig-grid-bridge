@@ -1,7 +1,7 @@
 [project]
 name = "bitwig-mcp-server"
 version = "0.0.1"
-description = "MCP server for Bitwig Studio."
+description = "Companion MCP and OSC adapter for Bitwig Grid Bridge."
 authors = [{ name = "John Stanford", email = "787382+jxstanford@users.noreply.github.com" }]
 readme = "README.md"
 keywords = ['python']
@@ -30,9 +30,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://jxstanford.github.io/bitwig-mcp-server/"
-Repository = "https://github.com/jxstanford/bitwig-mcp-server"
-Documentation = "https://jxstanford.github.io/bitwig-mcp-server/"
+Homepage = "https://github.com/critx-jt/bitwig-grid-bridge"
+Repository = "https://github.com/critx-jt/bitwig-grid-bridge"
+Documentation = "https://critx-jt.github.io/bitwig-grid-bridge/"
 
 [project.scripts]
 bitwig-browser-index = "bitwig_mcp_server.utils.index_browser:main"

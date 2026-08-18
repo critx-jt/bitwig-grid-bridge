@@ -1,1 +1,1 @@
-::: bitwig_mcp_server.foo
+::: bitwig_mcp_server.app

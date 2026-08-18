@@ -9,6 +9,7 @@ import logging
 from typing import Any, List, Optional
 
 from mcp.server import Server as MCPServer
+from mcp.server.stdio import stdio_server
 from mcp.types import TextContent
 
 from bitwig_mcp_server.osc.controller import BitwigOSCController
@@ -33,11 +34,13 @@ class BitwigMCPServer:
         # Create the MCP server
         self.mcp_server = MCPServer(f"bitwig-mcp-server-{self.settings.app_name}")
 
-        # Create the Bitwig OSC controller with settings
         self.controller = BitwigOSCController(
             self.settings.bitwig_host,
             self.settings.bitwig_send_port,
             self.settings.bitwig_receive_port,
+            bridge_enabled=self.settings.grid_bridge_enabled,
+            bridge_host=self.settings.grid_bridge_host,
+            bridge_port=self.settings.grid_bridge_port,
         )
 
         # Set up handlers
@@ -145,13 +148,19 @@ async def run_server(settings: Optional[Settings] = None) -> None:
         settings: Optional custom settings
     """
     server = BitwigMCPServer(settings)
-
     try:
+
         await server.start()
 
-        # Keep the server running
-        while True:
-            await asyncio.sleep(1)
+        # Serve the MCP protocol over stdio.  Keeping the process alive
+        # without reading stdin makes MCP clients wait indefinitely during
+        # initialization.
+        async with stdio_server() as (read_stream, write_stream):
+            await server.mcp_server.run(
+                read_stream,
+                write_stream,
+                server.mcp_server.create_initialization_options(),
+            )
     except asyncio.CancelledError:
         pass
     except KeyboardInterrupt:
