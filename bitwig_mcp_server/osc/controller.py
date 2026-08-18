@@ -5,9 +5,8 @@ High-level controller that combines client and server functionality
 """
 
 import logging
-import socket
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from bitwig_mcp_server.bridge import GridBridgeClient, GridBridgeError
 
@@ -72,7 +71,7 @@ class BitwigOSCController:
         self.connected = False
         self.last_refresh = 0.0
         self.connection_attempts = 0
-        self.parameter_snapshots: Dict[str, Dict[str, Any]] = {}
+        self.parameter_snapshots: dict[str, dict[str, Any]] = {}
         # In-memory snapshots are intentionally process-local. They provide
         # safe comparison/apply workflows for the OSC parameter surface;
         # Grid topology is read and mutated through the bridge graph API.
@@ -185,7 +184,7 @@ class BitwigOSCController:
 
             raise TimeoutError("connect", self.connection_timeout)
 
-        except socket.error as e:
+        except OSError as e:
             raise ConnectionError(details=f"Socket error: {e}")
         except Exception as e:
             raise ConnectionError(details=str(e))
@@ -313,7 +312,7 @@ class BitwigOSCController:
         self,
         address: str,
         value: Any,
-        response_address: Optional[str] = None,
+        response_address: str | None = None,
         timeout: float = 2.0,
     ) -> Any:
         """Send command and wait for response
@@ -409,7 +408,7 @@ class BitwigOSCController:
             return False
 
     # High-level control methods
-    def get_track_info(self, track_index: int) -> Dict[str, Any]:
+    def get_track_info(self, track_index: int) -> dict[str, Any]:
         """Get information about a track
 
         Args:
@@ -447,7 +446,7 @@ class BitwigOSCController:
 
         return track_info
 
-    def get_device_params(self) -> List[Dict[str, Any]]:
+    def get_device_params(self) -> list[dict[str, Any]]:
         """Get information about device parameters
 
         Returns:
@@ -508,7 +507,7 @@ class BitwigOSCController:
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self.bridge
 
-    def get_selected_device_state(self) -> Dict[str, Any]:
+    def get_selected_device_state(self) -> dict[str, Any]:
         """Return observable state, preferring the in-process Bitwig bridge."""
         bridge = self.bridge
         if bridge is not None and self._ensure_bridge_available():
@@ -560,7 +559,7 @@ class BitwigOSCController:
             }
 
         params = self.get_device_params()
-        device_properties: Dict[str, Any] = {}
+        device_properties: dict[str, Any] = {}
         prefix = "/device/"
         for address, value in self.server.received_messages.items():
             if address.startswith(prefix) and "/param/" not in address:
@@ -576,7 +575,7 @@ class BitwigOSCController:
             "parameters": params,
         }
 
-    def get_grid_capabilities(self) -> Dict[str, Any]:
+    def get_grid_capabilities(self) -> dict[str, Any]:
         """Return bridge capabilities and selected-device inspection data."""
         if self.bridge is None:
             return {"available": False, "bridge": False, "graph_available": False}
@@ -599,7 +598,7 @@ class BitwigOSCController:
                 "error": str(error),
             }
 
-    def get_grid_graph(self) -> Dict[str, Any]:
+    def get_grid_graph(self) -> dict[str, Any]:
         """Return the selected Grid graph topology and editable parameters."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False, "graph_available": False}
@@ -619,7 +618,7 @@ class BitwigOSCController:
                 "error": str(error),
             }
 
-    def get_grid_host_modulators(self) -> Dict[str, Any]:
+    def get_grid_host_modulators(self) -> dict[str, Any]:
         """Return host-level modulation sources on the selected Grid device."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False, "sources": []}
@@ -638,7 +637,7 @@ class BitwigOSCController:
                 "error": str(error),
             }
 
-    def search_grid_modules(self, query: str = "") -> Dict[str, Any]:
+    def search_grid_modules(self, query: str = "") -> dict[str, Any]:
         """Search the installed Bitwig Grid module catalog."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False, "modules": []}
@@ -653,7 +652,7 @@ class BitwigOSCController:
                 "error": str(error),
             }
 
-    def search_grid_modulators(self, query: str = "") -> Dict[str, Any]:
+    def search_grid_modulators(self, query: str = "") -> dict[str, Any]:
         """Search the installed Grid modulation source and destination catalog."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False, "modulators": []}
@@ -668,7 +667,7 @@ class BitwigOSCController:
                 "error": str(error),
             }
 
-    def grid_insert_modulator(self, package_id: str, x: int, y: int) -> Dict[str, Any]:
+    def grid_insert_modulator(self, package_id: str, x: int, y: int) -> dict[str, Any]:
         """Insert a cataloged Grid modulator at graph coordinates."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
@@ -680,7 +679,7 @@ class BitwigOSCController:
         source_port: int,
         target_module_id: str,
         target_port: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Connect a cataloged Grid modulator to a Grid input."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
@@ -696,7 +695,7 @@ class BitwigOSCController:
         module_id: str,
         parameter_id: str,
         value: float | int | bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Tune one parameter on a cataloged Grid modulator."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
@@ -704,7 +703,7 @@ class BitwigOSCController:
             module_id, parameter_id, value
         )
 
-    def grid_insert_module(self, package_id: str, x: int, y: int) -> Dict[str, Any]:
+    def grid_insert_module(self, package_id: str, x: int, y: int) -> dict[str, Any]:
         """Insert a Grid module at graph coordinates."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
@@ -712,7 +711,7 @@ class BitwigOSCController:
 
     def grid_set_module_parameter(
         self, module_id: str, parameter_id: str, value: float | int | bool
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Set one editable Grid module parameter."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
@@ -724,7 +723,7 @@ class BitwigOSCController:
         source_port: int,
         target_module_id: str,
         target_port: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Connect a Grid output port to a Grid input port."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
@@ -734,13 +733,13 @@ class BitwigOSCController:
 
     def grid_disconnect_module(
         self, target_module_id: str, target_port: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Disconnect a Grid input port."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self._require_bridge().graph_disconnect(target_module_id, target_port)
 
-    def grid_history(self) -> Dict[str, Any]:
+    def grid_history(self) -> dict[str, Any]:
         """Return Bitwig project history state from the local bridge."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False}
@@ -750,7 +749,7 @@ class BitwigOSCController:
             self.bridge_available = False
             return {"available": False, "bridge": False, "error": str(error)}
 
-    def grid_actions(self, filter_text: str = "") -> Dict[str, Any]:
+    def grid_actions(self, filter_text: str = "") -> dict[str, Any]:
         """List host actions exposed by the local bridge."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False}
@@ -760,37 +759,37 @@ class BitwigOSCController:
             self.bridge_available = False
             return {"available": False, "bridge": False, "error": str(error)}
 
-    def grid_invoke_action(self, action_id: str) -> Dict[str, Any]:
+    def grid_invoke_action(self, action_id: str) -> dict[str, Any]:
         """Invoke one exact Bitwig host action exposed by the bridge."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self._require_bridge().invoke_action(action_id)
 
-    def grid_insert_device(self, position: str, device_id: str) -> Dict[str, Any]:
+    def grid_insert_device(self, position: str, device_id: str) -> dict[str, Any]:
         """Insert a Bitwig device through the local bridge."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self._require_bridge().insert_device(position, device_id)
 
-    def grid_undo(self) -> Dict[str, Any]:
+    def grid_undo(self) -> dict[str, Any]:
         """Undo the latest Bitwig host operation."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self._require_bridge().undo()
 
-    def grid_redo(self) -> Dict[str, Any]:
+    def grid_redo(self) -> dict[str, Any]:
         """Redo the latest Bitwig host operation."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self._require_bridge().redo()
 
-    def grid_navigate(self, direction: str) -> Dict[str, Any]:
+    def grid_navigate(self, direction: str) -> dict[str, Any]:
         """Navigate the selected device through the local bridge."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self._require_bridge().navigate(direction)
 
-    def grid_tracks(self) -> Dict[str, Any]:
+    def grid_tracks(self) -> dict[str, Any]:
         """List the live main-track bank exposed by the local bridge."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False}
@@ -800,13 +799,13 @@ class BitwigOSCController:
             self.bridge_available = False
             return {"available": False, "bridge": False, "error": str(error)}
 
-    def grid_select_track(self, index: int) -> Dict[str, Any]:
+    def grid_select_track(self, index: int) -> dict[str, Any]:
         """Select a main track by its zero-based live bank index."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
         return self._require_bridge().select_track(index)
 
-    def set_selected_device_parameters(self, parameters: Dict[int, float]) -> List[int]:
+    def set_selected_device_parameters(self, parameters: dict[int, float]) -> list[int]:
         """Set multiple selected-device parameters and return changed indexes."""
         if not parameters:
             raise ValueError("At least one parameter is required")
@@ -840,7 +839,7 @@ class BitwigOSCController:
             self.client.set_device_parameter(index, value)
         return list(parameters)
 
-    def save_parameter_snapshot(self, name: str) -> Dict[str, Any]:
+    def save_parameter_snapshot(self, name: str) -> dict[str, Any]:
         """Capture the currently observable selected-device parameter state."""
         if not name or not isinstance(name, str):
             raise ValueError("Snapshot name must be a non-empty string")
@@ -856,7 +855,7 @@ class BitwigOSCController:
         self.parameter_snapshots[name] = snapshot
         return snapshot
 
-    def compare_parameter_snapshots(self, first: str, second: str) -> Dict[str, Any]:
+    def compare_parameter_snapshots(self, first: str, second: str) -> dict[str, Any]:
         """Compare two saved snapshots by parameter index."""
         try:
             left = self.parameter_snapshots[first]["parameters"]
@@ -881,7 +880,7 @@ class BitwigOSCController:
             "identical": not changed,
         }
 
-    def apply_parameter_snapshot(self, name: str) -> List[int]:
+    def apply_parameter_snapshot(self, name: str) -> list[int]:
         """Apply a saved parameter snapshot to the selected device."""
         try:
             values = self.parameter_snapshots[name]["parameters"]
@@ -891,7 +890,7 @@ class BitwigOSCController:
             {int(index): value for index, value in values.items() if value is not None}
         )
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get controller status information
 
         Returns:

@@ -4,6 +4,9 @@ Tool names are the MCP contract. Arguments use JSON objects. Read tools do not
 mutate Bitwig. Graph, device, and shaping apply tools require explicit
 `confirm: true` or an explicitly authorized `cooperative: true` argument.
 
+Use the [Workflow playbook](workflows.md) for safe ordering, state refreshes,
+verification, and recovery.
+
 ## Read tools
 
 | Tool | Arguments | Result |

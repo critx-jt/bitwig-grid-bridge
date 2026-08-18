@@ -28,11 +28,11 @@ legacy callers; new integrations must use the Grid Bridge endpoint.
 
 ## Start the adapter
 
-From the repository root:
+From a source checkout or release bundle:
 
 ```bash
-uv sync
-BITWIG_MCP_GRID_BRIDGE_ENABLED=true uv run python -m bitwig_mcp_server
+uv sync --frozen
+BITWIG_MCP_GRID_BRIDGE_ENABLED=true uv run bitwig-mcp
 ```
 
 Example MCP client configuration:
@@ -42,7 +42,8 @@ Example MCP client configuration:
   "mcpServers": {
     "bitwig-grid-bridge": {
       "command": "uv",
-      "args": ["run", "--project", ".", "python", "-m", "bitwig_mcp_server"],
+      "args": ["run", "--project", "/absolute/path/to/bitwig-grid-bridge", "bitwig-mcp"],
+      "cwd": "/absolute/path/to/bitwig-grid-bridge",
       "env": {
         "BITWIG_MCP_GRID_BRIDGE_ENABLED": "true",
         "BITWIG_MCP_GRID_BRIDGE_HOST": "127.0.0.1",
@@ -79,6 +80,8 @@ operations may still be available.
 
 ## Reference pages
 
+- [Workflow playbook](workflows.md): safe end-to-end tool sequences and completion evidence.
 - [Tool reference](tools.md): MCP names, arguments, and mutation classes.
 - [Data and safety](models.md): snapshots, identities, ranges, and revisions.
 - [Protocol and lifecycle](protocol.md): transport and recovery invariants.
+- [Automation scripts](../scripting.md): direct bridge use without MCP.

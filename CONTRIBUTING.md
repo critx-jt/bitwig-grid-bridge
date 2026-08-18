@@ -1,47 +1,59 @@
 # Contributing to Bitwig Grid Bridge
 
-Contributions should improve the Bitwig extension, its local protocol, the
-agent-facing adapter, or the disposable Grid examples.
+Contributions should improve the Bitwig extension, local bridge protocol, optional MCP adapter, documentation, or disposable examples. Read [Engineering and releases](docs/engineering.md) before changing runtime or release behavior.
 
 ## Development setup
 
 ```bash
 git clone https://github.com/critx-jt/bitwig-grid-bridge.git
 cd bitwig-grid-bridge
-uv sync
+uv sync --frozen
+make build-extension
 ```
 
-Build the extension with Java 21 and Maven:
-
-```bash
-mvn -f extension/pom.xml package
-```
+Java changes require Java 21 and Maven. Python supports versions 3.10–3.13.
 
 ## Before opening a pull request
 
-Run the focused checks:
-
 ```bash
-uv run pytest tests -q
-uv run ruff check bitwig_mcp_server tests/test_bridge.py tests/osc/test_controller.py
-uv run mkdocs build --strict
-mvn -f extension/pom.xml package
+make test
+uv run mypy
+make check
+make build-python
 ```
 
-Live Bitwig tests must use a disposable project under `examples/`. Do not
-modify a user's active project or commit generated Bitwig auto-backups.
+For changes to release assembly, also run:
 
-## Scope and capability claims
+```bash
+make release-bundle
+```
 
-The public Bitwig controller API does not expose arbitrary Grid graph
-mutation. New code must preserve the explicit `graph_available: false`
-boundary unless a supported API is verified. Do not infer module topology from
-OSC addresses or undocumented native project bytes.
+Live Bitwig tests must use a disposable project under `examples/projects/`. Do not modify a user's active project or commit generated Bitwig auto-backups.
 
-Mutations must run on Bitwig's host thread, expose a reversible operation where
-possible, and return enough state for an agent to verify the result. Add
-regression coverage for protocol errors, host-thread scheduling, concurrency,
-and project-state boundaries.
+## Runtime contracts
 
-Open issues and pull requests at:
-https://github.com/critx-jt/bitwig-grid-bridge
+The Java extension is authoritative for Bitwig state. Keep bridge traffic loopback-only and serialize Bitwig API work through the host-thread scheduler.
+
+New mutations must provide:
+
+- validated arguments, IDs, indexes, ranges, and options;
+- explicit confirmation or cooperative authorization;
+- stale-state rejection;
+- deterministic failure responses;
+- read-back evidence;
+- a documented recovery path where the Bitwig API permits one;
+- regression coverage for successful and rejected boundaries.
+
+The public Bitwig controller API does not expose arbitrary Grid graph mutation on every selected device. Preserve `graph_available: false` unless a supported capability is verified. Do not infer topology from OSC addresses, interface state, stale snapshots, or undocumented project bytes.
+
+## Documentation
+
+Update both audiences when behavior changes:
+
+- producer procedures in `docs/workflows.md` or `docs/scripting.md`;
+- agent sequencing and safety in `docs/agent/`;
+- installation, build, and release instructions in `docs/installation.md` and `docs/engineering.md`.
+
+Run the strict MkDocs build through `make check`. Broken navigation, links, and undocumented tool contracts are release blockers.
+
+Open issues and pull requests at <https://github.com/critx-jt/bitwig-grid-bridge>.

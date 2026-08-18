@@ -1,30 +1,28 @@
-name: "Setup Python Environment"
-description: "Set up Python environment for the given Python version"
-
+name: Set up Python environment
+description: Install a pinned uv release and synchronize the locked environment.
 inputs:
   python-version:
-    description: "Python version to use"
+    description: Python version to install
     required: true
-    default: "3.12"
+    default: "3.13"
   uv-version:
-    description: "uv version to use"
+    description: uv version to install
     required: true
-    default: "0.6.8"
-
+    default: "0.12.5"
 runs:
-  using: "composite"
+  using: composite
   steps:
-    - uses: actions/setup-python@v5
+    - name: Set up Python
+      uses: actions/setup-python@v7.0.0
       with:
         python-version: ${{ inputs.python-version }}
 
     - name: Install uv
-      uses: astral-sh/setup-uv@v2
+      uses: astral-sh/setup-uv@v10.0.1
       with:
         version: ${{ inputs.uv-version }}
-        enable-cache: "true"
-        cache-suffix: ${{ matrix.python-version }}
+        enable-cache: true
 
-    - name: Install Python dependencies
-      run: uv sync --frozen
+    - name: Synchronize locked environment
       shell: bash
+      run: uv sync --frozen

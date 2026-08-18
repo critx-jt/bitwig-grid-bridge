@@ -2,88 +2,149 @@ name: Bridge CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    tags: ["v*"]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
+    name: Quality and packages
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-
-      - name: Set up the environment
+      - name: Set up Python environment
         uses: ./.github/actions/setup-python-env
 
       - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Run checks
-        run: make check
-
-
-  extension:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5.7.0
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
 
-      - name: Build Bitwig extension
-        run: mvn -B -f extension/pom.xml package
-  tests-and-type-check:
+      - name: Run checks
+        run: make check
+
+      - name: Run Python type checks
+        run: uv run mypy
+
+      - name: Run Python tests
+        run: make test
+
+      - name: Build release bundle
+        run: make release-bundle
+
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Upload ready-to-use bundle
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ready-to-use-bundle
+          path: release/*
+          if-no-files-found: error
+
+  python-tests:
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-      fail-fast: false
-    defaults:
-      run:
-        shell: bash
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
-      - name: Set up the environment
+      - name: Set up Python environment
         uses: ./.github/actions/setup-python-env
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run tests (unit tests only)
+      - name: Run Python tests
         run: make test
-        # This uses the test target in the Makefile which already sets BITWIG_TESTS_DISABLED=1
 
-      - name: Run mypy type checking
-        run: source .venv/bin/activate && uv run mypy
-
-      - name: Upload coverage reports to Codecov with GitHub Action on Python 3.11
-        uses: codecov/codecov-action@v4
-        if: ${{ matrix.python-version == '3.11' }}
-
-  check-docs:
+  extension:
+    name: Bitwig extension
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
-      - name: Set up the environment
+      - name: Set up Java
+        uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build extension
+        run: |
+          make build-extension
+          cp extension/target/BitwigGridBridge.jar BitwigGridBridge.bwextension
+
+      - name: Upload extension
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: BitwigGridBridge
+          path: BitwigGridBridge.bwextension
+          if-no-files-found: error
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [quality, python-tests, extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python environment
         uses: ./.github/actions/setup-python-env
 
-      - name: Check if documentation can be built
-        run: uv run mkdocs build -s
+      - name: Set up Java
+        uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          test "$tag_version" = "$package_version"
+
+      - name: Build release assets
+        run: make release-bundle
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/BitwigGridBridge.bwextension \
+            release/bitwig-grid-bridge-*.zip \
+            dist/bitwig_grid_bridge-* \
+            --generate-notes \
+            --title "Bitwig Grid Bridge ${GITHUB_REF_NAME#v}" \
+            --verify-tag

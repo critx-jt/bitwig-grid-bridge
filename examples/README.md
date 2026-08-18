@@ -60,7 +60,10 @@ The examples intentionally cover the supported surface:
 - graph capability and live graph inspection when available;
 - reversible changes and undo.
 
-They do not claim arbitrary graph mutation from OSC or from a project file. For
-MCP graph insertion, connection, and parameter workflows, use the
-[documentation workflows](../docs/workflows.md) and the live capability response
-as the authority.
+They do not claim arbitrary graph mutation from OSC or from a project file.
+For direct protocol design and failure handling, use
+[Automation scripts](../docs/scripting.md). For MCP graph insertion,
+connection, and parameter workflows, use
+[Producer workflows](../docs/workflows.md) and the
+[Agent workflow playbook](../docs/agent/workflows.md). The live capability
+response remains authoritative.

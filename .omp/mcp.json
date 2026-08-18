@@ -4,7 +4,7 @@
     "bitwig-grid-bridge": {
       "type": "stdio",
       "command": "uv",
-      "args": ["run", "--project", ".", "python", "-m", "bitwig_mcp_server"],
+      "args": ["run", "--project", ".", "bitwig-mcp"],
       "cwd": ".",
       "env": {
         "BITWIG_MCP_GRID_BRIDGE_ENABLED": "true",

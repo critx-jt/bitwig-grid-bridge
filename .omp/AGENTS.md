@@ -2,6 +2,9 @@
 
 Use the `bitwig-grid-bridge` MCP server for live Bitwig interaction.
 
+Use `docs/agent/workflows.md` for end-to-end tool sequences and
+`docs/agent/models.md` for identity, range, and stale-state rules.
+
 ## Interaction contract
 
 - Start with `get_grid_capabilities` and `get_selected_device_state`.

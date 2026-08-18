@@ -18,11 +18,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp[cli]>=1.4.1",
-    "pydantic>=2.10.2",
-    "pydantic-settings>=2.6.1",
-    "pytest-asyncio>=0.25.3",
-    "python-osc>=1.8.3",
+    "mcp[cli]==1.28.1",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.15.0",
+    "python-osc==1.10.2",
 ]
 
 [project.urls]
@@ -33,25 +32,24 @@ Documentation = "https://critx-jt.github.io/bitwig-grid-bridge/"
 
 [dependency-groups]
 dev = [
-    "pytest>=7.2.0",
-    "pre-commit>=2.20.0",
-    "tox-uv>=1.11.3",
-    "deptry>=0.20.0",
-    "mypy>=0.991",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.6.9",
-    "mkdocs>=1.4.2",
-    "mkdocs-material>=8.5.10",
-    "mkdocstrings[python]>=0.26.1",
-    "mcp[cli]>=1.4.1",
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.7.7",
+    "mkdocstrings[python]==1.0.6",
+    "mypy==2.3.1",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.16.3",
 ]
 
 [build-system]
-requires = ["setuptools >= 61.0"]
+requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-py-modules = ["bitwig_mcp_server"]
+[project.scripts]
+bitwig-mcp = "bitwig_mcp_server.app:main"
+
+[tool.setuptools.packages.find]
+include = ["bitwig_mcp_server*"]
 
 [tool.mypy]
 files = ["bitwig_mcp_server"]
@@ -71,59 +69,6 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.ruff]
 target-version = "py310"
 line-length = 120
-fix = true
 
 [tool.ruff.lint]
-select = [
-    # flake8-2020
-    "YTT",
-    # flake8-bandit
-    "S",
-    # flake8-bugbear
-    "B",
-    # flake8-builtins
-    "A",
-    # flake8-comprehensions
-    "C4",
-    # flake8-debugger
-    "T10",
-    # flake8-simplify
-    "SIM",
-    # isort
-    "I",
-    # mccabe
-    "C90",
-    # pycodestyle
-    "E", "W",
-    # pyflakes
-    "F",
-    # pygrep-hooks
-    "PGH",
-    # pyupgrade
-    "UP",
-    # ruff
-    "RUF",
-    # tryceratops
-    "TRY",
-]
-ignore = [
-    # LineTooLong
-    "E501",
-    # DoNotAssignLambda
-    "E731",
-    # BroadException
-    "TRY003",
-]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]
-
-[tool.ruff.format]
-preview = true
-
-[tool.coverage.report]
-skip_empty = true
-
-[tool.coverage.run]
-branch = true
-source = ["bitwig_mcp_server"]
+select = ["E4", "E7", "E9", "F"]

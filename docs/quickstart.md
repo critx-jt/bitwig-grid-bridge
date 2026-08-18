@@ -1,28 +1,34 @@
 # Quickstart
 
-This page takes a producer from a clean checkout to a verified local bridge.
-Follow the numbered steps in order. Stop at the first failed check.
+This page takes a producer from a release asset or clean checkout to a verified
+local bridge. Follow the numbered steps in order. Stop at the first failed
+check.
 
 ## 1. Check prerequisites
 
 You need:
 
 - Bitwig Studio with Controller API 21 or newer.
-- Java 21 and Maven.
+- The release `.bwextension`, or Java 21 and Maven for a source build.
 - Python 3.10 or newer and `uv` for optional MCP use.
 
 The bridge uses loopback only. No cloud account or external network service is
 required at runtime.
 
-## 2. Build and install the extension
+## 2. Install the extension
 
-From the repository root:
+Copy the release asset:
 
 ```bash
-mvn -f extension/pom.xml package
 mkdir -p "$HOME/Bitwig Studio/Extensions"
-cp extension/target/bitwig-grid-bridge-0.1.0.jar \
+cp BitwigGridBridge.bwextension \
   "$HOME/Bitwig Studio/Extensions/BitwigGridBridge.bwextension"
+```
+
+To build from source instead:
+
+```bash
+make install-extension
 ```
 
 Restart Bitwig. Open **Settings → Controllers**, add **Bitwig Grid Bridge**, and

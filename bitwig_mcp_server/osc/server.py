@@ -9,8 +9,9 @@ import logging
 import socket
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any
 
 from pythonosc import dispatcher
 from pythonosc.osc_server import ThreadingOSCUDPServer
@@ -39,7 +40,7 @@ def _cleanup_servers() -> None:
                 sock.close()
                 logging.info(f"Successfully force-released port {port}")
             except OSError as e:
-                logging.error(f"Failed to force-release port {port}: {e}")
+                logging.exception(f"Failed to force-release port {port}: {e}")
 
     # Clear the set after cleanup
     _active_server_ports.clear()
@@ -59,7 +60,7 @@ class BitwigOSCServer:
         self,
         ip: str = DEFAULT_BITWIG_IP,
         port: int = DEFAULT_RECEIVE_PORT,
-        message_handler: Optional[Callable[[str, Any], None]] = None,
+        message_handler: Callable[[str, Any], None] | None = None,
     ):
         """Initialize the OSC server
 
@@ -72,14 +73,14 @@ class BitwigOSCServer:
         self.port = port
         self.running = False
         self.received_messages: dict[str, Any] = {}
-        self.server: Optional[ThreadingOSCUDPServer] = None
-        self.server_thread: Optional[threading.Thread] = None
+        self.server: ThreadingOSCUDPServer | None = None
+        self.server_thread: threading.Thread | None = None
 
         # Set up dispatcher
         self.dispatcher = dispatcher.Dispatcher()
 
         if message_handler is not None:
-            self.external_handler: Optional[Callable[[str, Any], None]] = message_handler
+            self.external_handler: Callable[[str, Any], None] | None = message_handler
             self.dispatcher.set_default_handler(self._handler_wrapper)
         else:
             self.external_handler = None
@@ -152,7 +153,7 @@ class BitwigOSCServer:
             except Exception as e:
                 logger.error(f"Error closing server socket: {e}")
 
-    def get_message(self, address: str) -> Optional[Any]:
+    def get_message(self, address: str) -> Any | None:
         """Get the latest message value for an address
 
         Args:
@@ -163,7 +164,7 @@ class BitwigOSCServer:
         """
         return self.received_messages.get(address)
 
-    def wait_for_message(self, address: str, timeout: float = 3.0) -> Optional[Any]:
+    def wait_for_message(self, address: str, timeout: float = 3.0) -> Any | None:
         """Wait for a specific message to be received
 
         Args:

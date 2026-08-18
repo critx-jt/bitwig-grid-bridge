@@ -9,4 +9,4 @@ from .app import main
 from .mcp.server import BitwigMCPServer
 from .settings import Settings, get_settings
 
-__all__ = ["Settings", "BitwigMCPServer", "main", "get_settings"]
+__all__ = ["BitwigMCPServer", "Settings", "get_settings", "main"]

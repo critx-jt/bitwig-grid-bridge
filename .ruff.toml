@@ -1,3 +1,0 @@
-# Disable complexity warnings for call_tool function
-[lint]
-ignore = ["TRY301", "C901"]

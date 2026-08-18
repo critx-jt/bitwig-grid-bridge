@@ -6,7 +6,6 @@ This module provides configuration settings using Pydantic for validation.
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -125,7 +124,7 @@ class Settings(BaseSettings):
         logger.info(f"Logging configured with level {self.log_level}")
 
     @property
-    def env_file_path(self) -> Optional[Path]:
+    def env_file_path(self) -> Path | None:
         """Get the path to the loaded .env file.
 
         Returns:

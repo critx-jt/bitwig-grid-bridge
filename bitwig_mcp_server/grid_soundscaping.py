@@ -10,7 +10,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-
 _UNIT_CONTROLS = ("density", "motion", "contrast", "temperature")
 
 _MODULE_TUNING: dict[str, tuple[str, ...]] = {

@@ -14,16 +14,19 @@ nav:
       - Quickstart: quickstart.md
       - Installation: installation.md
       - Workflows: workflows.md
+      - Automation scripts: scripting.md
       - Cheat sheet: cheatsheet.md
   - Agent reference:
       - Integration overview: agent/index.md
+      - Workflow playbook: agent/workflows.md
       - Tool reference: agent/tools.md
       - Data and safety: agent/models.md
       - Protocol and lifecycle: agent/protocol.md
   - Grid reference:
       - Live device inventory: grid-device-inventory.md
       - Modulator catalog: grid-modulator-catalog.md
-      - Module notes: modules.md
+  - Development:
+      - Engineering and releases: engineering.md
 plugins:
   - search:
       lang: en

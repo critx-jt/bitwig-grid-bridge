@@ -4,7 +4,7 @@ Bitwig OSC Exceptions
 This module defines custom exceptions for the Bitwig OSC integration.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 class BitwigOSCError(Exception):
@@ -22,7 +22,7 @@ class ConnectionError(BitwigOSCError):
     def __init__(
         self,
         message: str = "Failed to connect to Bitwig Studio",
-        details: Optional[str] = None,
+        details: str | None = None,
     ):
         """Initialize with an optional detailed message."""
         self.details = details
@@ -67,7 +67,7 @@ class ResourceNotFoundError(BitwigOSCError):
 class BitwigNotRespondingError(BitwigOSCError):
     """Error when Bitwig is not responding to OSC messages."""
 
-    def __init__(self, address: Optional[str] = None):
+    def __init__(self, address: str | None = None):
         """Initialize with an optional OSC address."""
         self.address = address
         message = "Bitwig Studio is not responding to OSC messages"
@@ -79,19 +79,19 @@ class BitwigNotRespondingError(BitwigOSCError):
 class OSCServerError(BitwigOSCError):
     """Error when the OSC server encounters an issue."""
 
-    def __init__(self, message: str, details: Optional[Exception] = None):
+    def __init__(self, message: str, details: Exception | None = None):
         """Initialize with message and optional exception details."""
         self.details = details
         full_message = message
         if details:
-            full_message += f": {str(details)}"
+            full_message += f": {details!s}"
         super().__init__(full_message)
 
 
 class FeatureNotSupportedError(BitwigOSCError):
     """Error when a feature is not supported by the current Bitwig OSC setup."""
 
-    def __init__(self, feature: str, requirement: Optional[str] = None):
+    def __init__(self, feature: str, requirement: str | None = None):
         """Initialize with feature name and optional requirement."""
         self.feature = feature
         self.requirement = requirement

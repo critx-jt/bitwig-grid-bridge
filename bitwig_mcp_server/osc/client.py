@@ -5,8 +5,7 @@ Handles communication with Bitwig Studio via OSC
 """
 
 import logging
-import socket
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pythonosc import udp_client
 
@@ -39,8 +38,8 @@ class BitwigOSCClient:
             self.ip = ip
             self.port = port
             self.client = udp_client.SimpleUDPClient(ip, port)
-            self.addr_log: List[str] = []  # Log of sent addresses for verification
-        except socket.error as e:
+            self.addr_log: list[str] = []  # Log of sent addresses for verification
+        except OSError as e:
             raise ConnectionError(details=f"Failed to create UDP client: {e}")
         except Exception as e:
             raise ConnectionError(details=str(e))
@@ -59,12 +58,12 @@ class BitwigOSCClient:
             logger.debug(f"Sending: {address} = {value}")
             self.client.send_message(address, value)
             self.addr_log.append(address)
-        except socket.error as e:
+        except OSError as e:
             raise ConnectionError(details=f"Failed to send message to {address}: {e}")
         except Exception as e:
             raise ConnectionError(details=f"Error sending message to {address}: {e}")
 
-    def get_sent_addresses(self) -> List[str]:
+    def get_sent_addresses(self) -> list[str]:
         """Get list of addresses that were sent
 
         Returns:
@@ -81,7 +80,7 @@ class BitwigOSCClient:
         self.send("/refresh", 1)
 
     # Transport controls
-    def play(self, state: Optional[bool] = None) -> None:
+    def play(self, state: bool | None = None) -> None:
         """Control playback
 
         Args:
@@ -408,7 +407,7 @@ class BitwigOSCClient:
 
         self.send(f"/device/select/{device_index}", 1)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get client status information
 
         Returns:

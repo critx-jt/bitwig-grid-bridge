@@ -6,21 +6,23 @@ change.
 ## Install and verify
 
 ```bash
-mvn -f extension/pom.xml package
-cp extension/target/bitwig-grid-bridge-0.1.0.jar \
-  "$HOME/Bitwig Studio/Extensions/BitwigGridBridge.bwextension"
+make install-extension
 python examples/automation/grid_bridge_demo.py inspect
 python examples/automation/grid_bridge_demo.py graph
 ```
 
+For a release asset, copy `BitwigGridBridge.bwextension` directly instead of
+running Maven.
+
 ## Start the optional MCP adapter
 
 ```bash
-BITWIG_MCP_GRID_BRIDGE_ENABLED=true uv run python -m bitwig_mcp_server
+uv sync --frozen
+BITWIG_MCP_GRID_BRIDGE_ENABLED=true uv run bitwig-mcp
 ```
 
-The MCP configuration and exact tool contracts are in the
-[agent reference](agent/index.md).
+The MCP configuration, exact tool contracts, and safe sequences are in the
+[agent reference](agent/index.md) and [agent workflow playbook](agent/workflows.md).
 
 ## Read and preview
 

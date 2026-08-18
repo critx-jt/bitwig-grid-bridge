@@ -1,119 +1,159 @@
-# Workflows
+# Producer workflows
 
-Use one visible goal per session. Every live operation follows the same
-checkpoint sequence:
+Use the same short loop for every live change:
 
-1. **Observe** capabilities, selection, and current values.
-2. **Plan** the single change and expected result.
-3. **Preview** when a non-mutating step exists.
+1. **Observe** the selected device and current capabilities.
+2. **Plan** one audible or structural result.
+3. **Preview** whenever the tool offers a preview.
 4. **Apply** one confirmed mutation.
-5. **Verify** by reading the new state.
-6. **Recover** with undo or a snapshot when needed.
+5. **Verify** by reading state and listening in Bitwig.
+6. **Recover** immediately if the result is wrong.
 
-Keep a disposable project open while learning. It is valid to stop after any
-read-only step.
+Keep the Bitwig project open, keep the target track and device selected, and avoid changing selection in Bitwig while an operation is in progress. A selected-device name is not a durable identity.
 
-## Preview-first shaping
+## Inspect a Grid before editing
 
-Use shaping when you have a sound or interaction brief and exposed controls on
-the selected device:
+Start with `get_grid_capabilities`, then `get_selected_device_state`.
 
-```text
-1. get_grid_capabilities
-2. get_selected_device_state
-3. grid_shape_start(brief, style or preset)
-4. grid_shape_compose(session_id, changes)
-5. grid_shape_status(session_id)
-6. Review the before → after preview
-7. grid_shape_apply(session_id, revision, confirm=true)
-8. grid_shape_status(session_id)
-```
+Check these fields before planning work:
 
-Rules:
+- `graph_available`: whether the selected device exposes supported Grid graph operations.
+- Selected-device name and type: whether the bridge is pointed at the intended device.
+- Exposed controls and current values: the safe surface for parameter-only edits.
+- Current graph revision and modules: the source of instance IDs, ports, and coordinates.
 
-- A preview does not change Bitwig.
-- A shaping draft uses normalized `0..1` values; the bridge applies the exposed
-  control values.
-- The exact current revision is required for apply.
-- If selection changed, re-read and compose again.
-- Use `grid_shape_undo` to restore the previous applied shaping state.
+If `graph_available` is `false`, use exposed-control workflows only. Do not infer modules or cable routes from the Bitwig interface, screenshots, old inventory, or project files.
 
-### Choose a starting style
+## Make a small parameter change
 
-| Style | Starting character |
-| --- | --- |
-| `glass` | bright, open, precise motion |
-| `ember` | warm, body-forward motion |
-| `acid` | high-contrast rhythmic motion |
-| `hollow` | sparse, airy space |
+Use this path for an audible adjustment that does not alter the Grid graph.
 
-Authored profiles provide a more specific starting direction:
-`slow-air`, `deep-bed`, `distant-events`, `soft-drift`, `night-motion`,
-`layered-motion`, and `pulse-lab`.
+1. Call `get_selected_device_state`.
+2. Identify the exposed control by its returned index and current value.
+3. Save a recovery point with `save_parameter_snapshot`.
+4. Change one or more values with `set_selected_device_parameters`.
+5. Read the selected-device state again and listen.
+6. If necessary, restore the named snapshot with `apply_parameter_snapshot`.
 
-Change one control at a time after the first preview. Leave headroom instead of
-filling every control.
+For A/B work, save two snapshots and use `compare_parameter_snapshots` before deciding which state to keep. Snapshots are process-local: restarting the MCP adapter clears them.
 
-## Inspecting and editing a Grid graph
+## Shape exposed controls from a brief
 
-Start only when `get_grid_capabilities` reports `graph_available: true`.
+Shaping is the safest creative workflow because it separates preview from mutation.
 
-```text
-1. get_grid_capabilities
-2. get_grid_graph
-3. search_grid_modules or search_grid_modulators
-4. Resolve the package ID or live instance ID
-5. Insert, connect, or edit one item with confirmation
-6. Re-read get_grid_graph
-7. Verify parameters from live range/options metadata
-```
+1. Call `grid_list_style_presets` for authored profiles, or `grid_list_soundscape_styles` for broader vocabulary.
+2. Start a session with `grid_shape_start`, supplying a concrete brief and optional style.
+3. Review the returned proposed controls, values, explanation, `session_id`, and `revision`.
+4. Refine with `grid_shape_compose` when the preview misses the brief. Each compose creates a new revision.
+5. Apply only the latest reviewed revision with `grid_shape_apply`, passing explicit confirmation.
+6. Call `grid_shape_status` and listen in Bitwig.
+7. Use `grid_shape_undo` with the same session ID to restore the pre-apply values.
 
-Do not reuse instance IDs, port indexes, coordinates, or package assumptions
-from another project. Re-read after selection, insertion, connection, or reload.
+A useful brief describes audible intent rather than implementation: “slower motion, fewer bright transients, preserve the bass weight.” The bridge chooses only from controls actually exposed by the selected device.
 
-### Keep a graph readable
+Never apply an earlier revision after composing a newer one. If Bitwig selection or parameters changed outside the session, re-read state and start or compose a fresh revision.
 
-For a layout another person can inspect:
+## Insert and connect a Grid module
 
-- keep the primary signal around `y=2`;
-- keep modulation around `y=4` or `y=5`;
-- keep secondary voice/effect modules around `y=7`;
-- leave roughly three Grid points between adjacent modules;
-- keep a typical graph within `x=2..29`, `y=2..7` when possible.
+Graph edits require a supported selected Grid and live graph state.
 
-A coordinate-only move may not survive reload in the current Bitwig build. For a
-persistent relayout, capture the graph, clear and reinsert modules at explicit
-positions, reconnect routes, restore writable parameters, save, restart, and
-verify.
+1. Call `get_grid_graph` and note the graph revision, existing instance IDs, coordinates, ports, and connections.
+2. Search the installed catalog with `search_grid_modules`.
+3. Choose the exact returned package ID; names are not insertion identifiers.
+4. Pick free coordinates from the current graph.
+5. Call `grid_insert_module` with the package ID, coordinates, and explicit confirmation.
+6. Read `get_grid_graph` again. Find the new instance ID and its live input/output port indexes.
+7. Call `grid_connect_modules` using those returned IDs and indexes.
+8. Re-read the graph and verify that the expected module and connection exist.
+9. Listen before making another structural change.
 
-## Remote controls and snapshots
+Do not chain insertion, parameter changes, and cabling from one old graph snapshot. Each mutation can change instance IDs, coordinates, connections, or revision.
 
-For a small reversible experiment:
+## Add modulation
 
-```bash
-python examples/automation/grid_bridge_demo.py sweep \
-  --index 2 --minimum 0.2 --maximum 0.8 --duration 4
-```
+Use `search_grid_modulators` for host modulators and `get_grid_host_modulators` to inspect the modulators available on the selected Grid.
 
-The example restores the original value unless `--keep` is supplied.
+A safe sequence:
 
-For a larger edit:
+1. Read the graph and host-modulator state.
+2. Resolve the exact modulator package or live instance.
+3. Insert with `grid_insert_modulator` when needed.
+4. Re-read the graph to obtain the new instance and parameter IDs.
+5. Set one modulator control with `grid_set_modulator_parameter`.
+6. Connect it with `grid_connect_modulator` using live port indexes.
+7. Re-read and listen for range, polarity, and rate problems.
 
-1. Save a named parameter snapshot.
-2. Make one change or preview.
-3. Compare the snapshots.
-4. Restore the first snapshot when needed.
-5. Read the selected-device state again.
+Prefer one modulation route at a time. Confirm that the destination remains musically useful at the full modulation range before adding a second route.
 
-## Navigation
+## Replace a parameterized graph detail
 
-Use the live track list and bridge navigation tools:
+For a known module parameter:
 
-```text
-grid_list_tracks
-grid_select_track(track_index)
-grid_navigate_device(direction="next" | "previous" | "parent")
-```
+1. Read `get_grid_graph`.
+2. Resolve the module instance and native parameter ID from that response.
+3. Check the returned type, native range, or options.
+4. Call `grid_set_module_parameter` with explicit confirmation.
+5. Read the graph again and compare the returned current value.
 
-Re-read selected-device state after navigation. A device name is not a durable
-identity across containers or projects.
+Never convert a display label directly into a native value unless the live response defines that mapping. Integer choices, booleans, and floats have different contracts.
+
+## Disconnect or remove a route safely
+
+`grid_disconnect_module` disconnects the target input identified by a live target module ID and target port index.
+
+Before disconnecting:
+
+1. Read the graph and identify the exact connection.
+2. Note the source and target so the route can be reconstructed.
+3. Disconnect with explicit confirmation.
+4. Re-read the graph and verify only the intended connection disappeared.
+5. Use `grid_project_undo` if the wrong host operation was applied.
+
+## Navigate tracks and devices
+
+Selection-changing tools are useful, but selection is shared with the Bitwig interface.
+
+1. Call `grid_list_tracks` and use its zero-based track indexes.
+2. Select with `grid_select_track`.
+3. Call `get_selected_device_state` to establish the new context.
+4. Move with `grid_navigate_device` using `next`, `previous`, or `parent`.
+5. Re-read selected-device state after every navigation.
+
+Do not cache track or device positions across project edits. Track banks, nesting, and selection can change.
+
+## Draft a soundscape before touching the project
+
+`grid_soundscape_plan` is non-mutating. Give it a brief to obtain a staged recipe, then inspect current capabilities before translating any step into live operations.
+
+Use this for exploratory prompts such as:
+
+- “A restrained metallic pulse with movement every eight bars.”
+- “A distant granular bed that leaves the center clear for vocals.”
+- “A low, unstable drone with no abrupt level changes.”
+
+The plan is guidance, not proof that packages or graph operations are available. Resolve every package through the live catalogs and every instance through the current graph.
+
+## Recovery order
+
+Use the narrowest recovery mechanism that matches the change:
+
+1. `grid_shape_undo` for the latest applied shaping revision.
+2. `apply_parameter_snapshot` for a named exposed-control state.
+3. `grid_project_undo` for the latest Bitwig host mutation.
+4. `grid_project_redo` only after confirming the undone operation was the intended one.
+
+After any recovery call, read state again. Never assume that undo restored the selection or graph context expected by an earlier snapshot.
+
+## Stop conditions
+
+Stop instead of retrying when:
+
+- a tool result starts with `Error:`;
+- the selected device changed;
+- the graph revision is stale;
+- a package ID, instance ID, parameter ID, or port index is missing;
+- `graph_available` is `false` for a graph operation;
+- Bitwig or the bridge extension restarted;
+- the requested change cannot be expressed through returned capabilities.
+
+Re-establish capabilities and live state before continuing. Repeating a stale mutation is more dangerous than leaving a partial edit visible and recoverable.

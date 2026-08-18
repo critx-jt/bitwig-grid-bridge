@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
 from threading import RLock
-from typing import Any, Callable, cast
-
+from typing import Any, cast
 
 STYLE_PRESETS: dict[str, dict[str, float]] = {
     "glass": {

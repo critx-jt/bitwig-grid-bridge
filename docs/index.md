@@ -11,10 +11,12 @@ and keep an undo path.
 | --- | --- |
 | Install the bridge | [Installation](installation.md) |
 | Make the first connection | [Quickstart](quickstart.md) |
-| Shape a sound from a brief | [Workflows](workflows.md#preview-first-shaping) |
-| Inspect or edit a Grid graph | [Graph workflow](workflows.md#inspecting-and-editing-a-grid-graph) |
+| Shape a sound from a brief | [Shaping workflow](workflows.md#shape-exposed-controls-from-a-brief) |
+| Inspect or edit a Grid graph | [Graph workflow](workflows.md#insert-and-connect-a-grid-module) |
+| Automate a repeatable local task | [Automation scripts](scripting.md) |
 | Find a command quickly | [Cheat sheet](cheatsheet.md) |
 | Connect an MCP client | [Agent reference](agent/index.md) |
+| Build or release the project | [Engineering](engineering.md) |
 
 ## The working method
 
@@ -47,12 +49,10 @@ or connections from another project or from the interface.
 
 ## Five-minute check
 
-From the repository root:
+Install the release `.bwextension`, or build it from a source checkout:
 
 ```bash
-mvn -f extension/pom.xml package
-cp extension/target/bitwig-grid-bridge-0.1.0.jar \
-  "$HOME/Bitwig Studio/Extensions/BitwigGridBridge.bwextension"
+make install-extension
 python examples/automation/grid_bridge_demo.py inspect
 ```
 

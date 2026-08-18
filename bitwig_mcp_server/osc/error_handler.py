@@ -6,7 +6,8 @@ This module provides centralized error handling functions for the OSC integratio
 
 import logging
 import time
-from typing import Any, Callable, Dict, Set, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from .exceptions import (
     BitwigOSCError,
@@ -24,11 +25,11 @@ class ErrorHandler:
     def __init__(self) -> None:
         """Initialize the error handler."""
         # Track known Bitwig features and capabilities
-        self.supported_features: Set[str] = set()
-        self.unsupported_features: Set[str] = set()
+        self.supported_features: set[str] = set()
+        self.unsupported_features: set[str] = set()
 
         # Keep track of recent errors for diagnostics
-        self.recent_errors: Dict[str, Tuple[float, BitwigOSCError]] = {}
+        self.recent_errors: dict[str, tuple[float, BitwigOSCError]] = {}
         self.max_recent_errors = 10
 
         # Connection status tracking
@@ -302,7 +303,7 @@ class ErrorHandler:
         self.unsupported_features.add(feature)
         self.supported_features.discard(feature)
 
-    def get_diagnostic_info(self) -> Dict[str, Any]:
+    def get_diagnostic_info(self) -> dict[str, Any]:
         """Get diagnostic information.
 
         Returns:

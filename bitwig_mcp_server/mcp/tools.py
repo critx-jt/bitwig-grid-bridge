@@ -7,7 +7,7 @@ This module provides MCP tools for controlling Bitwig Studio.
 import json
 import logging
 import math
-from typing import Any, Dict, List
+from typing import Any
 
 from mcp.types import TextContent, Tool
 
@@ -17,12 +17,12 @@ from bitwig_mcp_server.osc.controller import BitwigOSCController
 logger = logging.getLogger(__name__)
 
 
-def _mutation_is_authorized(arguments: Dict[str, Any]) -> bool:
+def _mutation_is_authorized(arguments: dict[str, Any]) -> bool:
     """Allow explicit confirmation or prompt/skill-authorized cooperation."""
     return arguments.get("confirm") is True or arguments.get("cooperative") is True
 
 
-def get_bitwig_tools() -> List[Tool]:
+def get_bitwig_tools() -> list[Tool]:
     """Get all available Bitwig tools
 
     Returns:
@@ -504,8 +504,8 @@ def get_bitwig_tools() -> List[Tool]:
     ]
 
 async def execute_tool(
-    controller: BitwigOSCController, name: str, arguments: Dict[str, Any]
-) -> List[TextContent]:
+    controller: BitwigOSCController, name: str, arguments: dict[str, Any]
+) -> list[TextContent]:
     """Execute a Bitwig tool
 
     Args:
@@ -879,4 +879,4 @@ async def execute_tool(
 
     except Exception as e:
         logger.exception(f"Error executing tool {name}: {e}")
-        return [TextContent(type="text", text=f"Error: {str(e)}")]
+        return [TextContent(type="text", text=f"Error: {e!s}")]

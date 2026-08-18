@@ -6,7 +6,7 @@ Implementation of the Model Context Protocol server for Bitwig Studio integratio
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 from mcp.server import Server as MCPServer
 from mcp.server.stdio import stdio_server
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class BitwigMCPServer:
     """MCP server for Bitwig Studio integration"""
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(self, settings: Settings | None = None):
         """Initialize the Bitwig MCP server
 
         Args:
@@ -78,7 +78,7 @@ class BitwigMCPServer:
         except Exception as e:
             logger.exception(f"Error while stopping Bitwig Grid Bridge MCP: {e}")
 
-    async def list_tools(self) -> List[Any]:
+    async def list_tools(self) -> list[Any]:
         """List available Bitwig tools"""
         from bitwig_mcp_server.mcp.tools import get_bitwig_tools
 
@@ -86,7 +86,7 @@ class BitwigMCPServer:
 
     async def call_tool(
         self, name: str, arguments: dict[str, Any]
-    ) -> List[TextContent]:
+    ) -> list[TextContent]:
         """Call a Bitwig tool
 
         Args:
@@ -109,7 +109,7 @@ class BitwigMCPServer:
 
 
 
-async def run_server(settings: Optional[Settings] = None) -> None:
+async def run_server(settings: Settings | None = None) -> None:
     """Run the Bitwig MCP server
 
     Args:
