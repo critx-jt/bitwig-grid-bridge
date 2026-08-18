@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import socket
-from typing import Any
+from typing import Any, cast
 
 
 class GridBridgeError(RuntimeError):
@@ -31,9 +31,12 @@ class GridBridgeClient:
                 f"Bridge unavailable at {self.host}:{self.port}: {error}"
             ) from error
         try:
-            payload = json.loads(response)
+            raw_payload = json.loads(response)
         except json.JSONDecodeError as error:
             raise GridBridgeError(f"Invalid bridge response: {response!r}") from error
+        if not isinstance(raw_payload, dict):
+            raise GridBridgeError(f"Invalid bridge response: {response!r}")
+        payload = cast(dict[str, Any], raw_payload)
         if not payload.get("ok", False):
             raise GridBridgeError(payload.get("error", "Bridge request failed"))
         return payload

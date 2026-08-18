@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     app_logo_image: Path = Field(
         default_factory=lambda: Path(__file__).resolve().parent.parent / "logo.jpg"
     )
-    log_level: str = Field("INFO", description="The logging level.")
+    log_level: str = Field(default="INFO", description="The logging level.")
 
     # Bitwig settings
     bitwig_host: str = Field(

@@ -16,12 +16,12 @@ from pythonosc import dispatcher
 from pythonosc.osc_server import ThreadingOSCUDPServer
 
 # Keep track of created servers for cleanup
-_active_server_ports = set()
+_active_server_ports: set[int] = set()
 
 
 @atexit.register
-def _cleanup_servers():
-    """Attempt to forcibly release any used OSC server ports on exit"""
+def _cleanup_servers() -> None:
+    """Attempt to forcibly release any used OSC server ports on exit."""
     for port in _active_server_ports:
         try:
             # Try to bind to the port - if successful, it means no server is using it
@@ -78,18 +78,16 @@ class BitwigOSCServer:
         # Set up dispatcher
         self.dispatcher = dispatcher.Dispatcher()
 
-        # If a custom handler was provided, wrap it
-        if message_handler:
-            self.external_handler = message_handler
+        if message_handler is not None:
+            self.external_handler: Optional[Callable[[str, Any], None]] = message_handler
             self.dispatcher.set_default_handler(self._handler_wrapper)
         else:
             self.external_handler = None
             self.dispatcher.set_default_handler(self._default_handler)
 
     def _handler_wrapper(self, address: str, *args: Any) -> None:
-        """Wrapper for external handler that also stores messages"""
         self._default_handler(address, *args)
-        if self.external_handler:
+        if self.external_handler is not None:
             self.external_handler(address, *args)
 
     def _default_handler(self, address: str, *args: Any) -> None:

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class ErrorHandler:
     """Handles errors and retries for OSC communication."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the error handler."""
         # Track known Bitwig features and capabilities
         self.supported_features: Set[str] = set()
@@ -32,7 +32,7 @@ class ErrorHandler:
         self.max_recent_errors = 10
 
         # Connection status tracking
-        self.connection_status = {
+        self.connection_status: dict[str, Any] = {
             "last_successful_comm": 0.0,
             "consecutive_timeouts": 0,
             "last_error": None,
@@ -191,13 +191,13 @@ class ErrorHandler:
 
     def retry_with_timeout(
         self,
-        operation: Callable,
+        operation: Callable[..., Any],
         operation_name: str,
         max_retries: int = 3,
         retry_delay: float = 0.5,
         timeout: float = 5.0,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> Any:
         """Retry an operation with timeout.
 

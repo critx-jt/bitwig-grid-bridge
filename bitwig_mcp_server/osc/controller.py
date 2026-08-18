@@ -312,7 +312,7 @@ class BitwigOSCController:
             response_address = address
 
         # Define the operation to retry
-        def _send_and_wait_operation():
+        def _send_and_wait_operation() -> Any:
             # Clear any previous messages with this address
             self.server.received_messages.pop(response_address, None)
 
@@ -474,11 +474,18 @@ class BitwigOSCController:
             logger.info("Bitwig Grid bridge became available")
         return self.bridge_available
 
+    def _require_bridge(self) -> GridBridgeClient:
+        """Return a live bridge client or raise a transport error."""
+        if not self._ensure_bridge_available() or self.bridge is None:
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
+        return self.bridge
+
     def get_selected_device_state(self) -> Dict[str, Any]:
         """Return observable state, preferring the in-process Bitwig bridge."""
-        if self._ensure_bridge_available():
+        bridge = self.bridge
+        if bridge is not None and self._ensure_bridge_available():
             try:
-                payload = self.bridge.state()
+                payload = bridge.state()
                 parameters = [
                     {
                         **parameter,
@@ -499,7 +506,7 @@ class BitwigOSCController:
                     "parameters": parameters,
                 }
                 if result["graph_available"]:
-                    result["graph"] = self.bridge.graph_state()
+                    result["graph"] = bridge.graph_state()
                 return result
             except GridBridgeError as error:
                 logger.warning(
@@ -552,7 +559,7 @@ class BitwigOSCController:
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False, "graph_available": False}
         try:
-            graph = self.bridge.graph_state()
+            graph = self._require_bridge().graph_state()
             return {
                 "available": True,
                 "bridge": True,
@@ -575,7 +582,7 @@ class BitwigOSCController:
             return {
                 "available": True,
                 "bridge": True,
-                **self.bridge.graph_host_modulators(),
+                **self._require_bridge().graph_host_modulators(),
             }
         except GridBridgeError as error:
             self.bridge_available = False
@@ -591,7 +598,7 @@ class BitwigOSCController:
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False, "modules": []}
         try:
-            return self.bridge.graph_catalog(query)
+            return self._require_bridge().graph_catalog(query)
         except GridBridgeError as error:
             self.bridge_available = False
             return {
@@ -606,7 +613,7 @@ class BitwigOSCController:
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False, "modulators": []}
         try:
-            return self.bridge.graph_modulators(query)
+            return self._require_bridge().graph_modulators(query)
         except GridBridgeError as error:
             self.bridge_available = False
             return {
@@ -620,7 +627,7 @@ class BitwigOSCController:
         """Insert a cataloged Grid modulator at graph coordinates."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.graph_insert_modulator(package_id, x, y)
+        return self._require_bridge().graph_insert_modulator(package_id, x, y)
 
     def grid_connect_modulator(
         self,
@@ -632,7 +639,7 @@ class BitwigOSCController:
         """Connect a cataloged Grid modulator to a Grid input."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.graph_connect_modulator(
+        return self._require_bridge().graph_connect_modulator(
             source_module_id,
             source_port,
             target_module_id,
@@ -648,13 +655,15 @@ class BitwigOSCController:
         """Tune one parameter on a cataloged Grid modulator."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.graph_set_modulator_parameter(module_id, parameter_id, value)
+        return self._require_bridge().graph_set_modulator_parameter(
+            module_id, parameter_id, value
+        )
 
     def grid_insert_module(self, package_id: str, x: int, y: int) -> Dict[str, Any]:
         """Insert a Grid module at graph coordinates."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.graph_insert(package_id, x, y)
+        return self._require_bridge().graph_insert(package_id, x, y)
 
     def grid_set_module_parameter(
         self, module_id: str, parameter_id: str, value: float | int | bool
@@ -662,7 +671,7 @@ class BitwigOSCController:
         """Set one editable Grid module parameter."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.graph_set_parameter(module_id, parameter_id, value)
+        return self._require_bridge().graph_set_parameter(module_id, parameter_id, value)
 
     def grid_connect_modules(
         self,
@@ -674,7 +683,7 @@ class BitwigOSCController:
         """Connect a Grid output port to a Grid input port."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.graph_connect(
+        return self._require_bridge().graph_connect(
             source_module_id, source_port, target_module_id, target_port
         )
 
@@ -684,14 +693,14 @@ class BitwigOSCController:
         """Disconnect a Grid input port."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.graph_disconnect(target_module_id, target_port)
+        return self._require_bridge().graph_disconnect(target_module_id, target_port)
 
     def grid_history(self) -> Dict[str, Any]:
         """Return Bitwig project history state from the local bridge."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False}
         try:
-            return self.bridge.history()
+            return self._require_bridge().history()
         except GridBridgeError as error:
             self.bridge_available = False
             return {"available": False, "bridge": False, "error": str(error)}
@@ -701,7 +710,7 @@ class BitwigOSCController:
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False}
         try:
-            return self.bridge.actions(filter_text)
+            return self._require_bridge().actions(filter_text)
         except GridBridgeError as error:
             self.bridge_available = False
             return {"available": False, "bridge": False, "error": str(error)}
@@ -710,38 +719,38 @@ class BitwigOSCController:
         """Invoke one exact Bitwig host action exposed by the bridge."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.invoke_action(action_id)
+        return self._require_bridge().invoke_action(action_id)
 
     def grid_insert_device(self, position: str, device_id: str) -> Dict[str, Any]:
         """Insert a Bitwig device through the local bridge."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.insert_device(position, device_id)
+        return self._require_bridge().insert_device(position, device_id)
 
     def grid_undo(self) -> Dict[str, Any]:
         """Undo the latest Bitwig host operation."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.undo()
+        return self._require_bridge().undo()
 
     def grid_redo(self) -> Dict[str, Any]:
         """Redo the latest Bitwig host operation."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.redo()
+        return self._require_bridge().redo()
 
     def grid_navigate(self, direction: str) -> Dict[str, Any]:
         """Navigate the selected device through the local bridge."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.navigate(direction)
+        return self._require_bridge().navigate(direction)
 
     def grid_tracks(self) -> Dict[str, Any]:
         """List the live main-track bank exposed by the local bridge."""
         if not self._ensure_bridge_available():
             return {"available": False, "bridge": False}
         try:
-            return self.bridge.tracks()
+            return self._require_bridge().tracks()
         except GridBridgeError as error:
             self.bridge_available = False
             return {"available": False, "bridge": False, "error": str(error)}
@@ -750,7 +759,7 @@ class BitwigOSCController:
         """Select a main track by its zero-based live bank index."""
         if not self._ensure_bridge_available():
             raise GridBridgeError("Bitwig Grid bridge is unavailable")
-        return self.bridge.select_track(index)
+        return self._require_bridge().select_track(index)
 
     def set_selected_device_parameters(self, parameters: Dict[int, float]) -> List[int]:
         """Set multiple selected-device parameters and return changed indexes."""
@@ -769,7 +778,7 @@ class BitwigOSCController:
 
         if self._ensure_bridge_available():
             try:
-                self.bridge.set_parameters_atomic(parameters)
+                self._require_bridge().set_parameters_atomic(parameters)
                 return list(parameters)
             except GridBridgeError as error:
                 logger.warning(

@@ -846,6 +846,7 @@ async def execute_tool(
                 raise ValueError("module_id must be a non-empty string")
             if not isinstance(parameter_id, str) or not parameter_id.strip():
                 raise ValueError("parameter_id must be a non-empty string")
+            normalized_value: float | bool
             if isinstance(value, bool):
                 normalized_value = value
             elif isinstance(value, (int, float)) and not isinstance(value, bool):

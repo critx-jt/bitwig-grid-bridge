@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 from functools import wraps
 from threading import RLock
-from typing import Any
+from typing import Any, Callable, cast
 
 
 STYLE_PRESETS: dict[str, dict[str, float]] = {
@@ -117,9 +117,9 @@ class GridShapeSession:
     status: str = "draft"
     history: list[dict[str, Any]] = field(default_factory=list)
 
-def _synchronized(method):
+def _synchronized(method: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(method)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         with self._lock:
             return method(self, *args, **kwargs)
 
@@ -290,7 +290,7 @@ class GridShapeManager:
         state = controller.get_selected_device_state()
         if not state.get("available", False):
             raise ValueError("no selected Bitwig device is available")
-        return state
+        return cast(dict[str, Any], state)
 
     def _wait_for_change(
         self,

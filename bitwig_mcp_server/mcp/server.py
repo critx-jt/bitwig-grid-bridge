@@ -32,7 +32,9 @@ class BitwigMCPServer:
         self.settings = settings or Settings()
 
         # Create the MCP server
-        self.mcp_server = MCPServer(f"bitwig-grid-bridge-{self.settings.app_name}")
+        self.mcp_server: MCPServer = MCPServer(
+            f"bitwig-grid-bridge-{self.settings.app_name}"
+        )
 
         self.controller = BitwigOSCController(
             self.settings.bitwig_host,

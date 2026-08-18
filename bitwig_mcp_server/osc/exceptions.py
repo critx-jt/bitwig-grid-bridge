@@ -4,7 +4,7 @@ Bitwig OSC Exceptions
 This module defines custom exceptions for the Bitwig OSC integration.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 
 class BitwigOSCError(Exception):
@@ -44,7 +44,7 @@ class TimeoutError(BitwigOSCError):
 class InvalidParameterError(BitwigOSCError):
     """Error when an invalid parameter is provided."""
 
-    def __init__(self, parameter: str, value: any, reason: str):
+    def __init__(self, parameter: str, value: Any, reason: str):
         """Initialize with parameter name, value and reason."""
         self.parameter = parameter
         self.value = value
