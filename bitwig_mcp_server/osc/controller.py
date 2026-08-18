@@ -25,7 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 class BitwigOSCController:
-    """Controller for bidirectional OSC communication with Bitwig Studio"""
+    """Legacy OSC controller with an optional Grid Bridge transport.
+
+    OSC support is retained for compatibility with older direct callers. The
+    MCP adapter disables it by default and uses the local Grid Bridge only.
+    """
 
     def __init__(
         self,
@@ -37,6 +41,7 @@ class BitwigOSCController:
         bridge_enabled: bool = False,
         bridge_host: str = "127.0.0.1",
         bridge_port: int = 8765,
+        osc_enabled: bool = True,
     ):
         """Initialize the controller
 
@@ -52,8 +57,10 @@ class BitwigOSCController:
         self.receive_port = receive_port
         self.connection_timeout = connection_timeout
         self.reconnect_attempts = reconnect_attempts
+        self.osc_enabled = osc_enabled
 
-        # Create client and server
+        # Create client and server for legacy direct OSC callers. The MCP
+        # adapter passes osc_enabled=False and never starts these endpoints.
         self.client = BitwigOSCClient(ip, send_port)
         self.server = BitwigOSCServer(ip, receive_port)
 
@@ -75,16 +82,34 @@ class BitwigOSCController:
         self.bridge_available = False
 
     def start(self) -> None:
-        """Start the OSC controller.
+        """Start the configured bridge or deprecated OSC transport.
 
-        OSC over UDP is connectionless: successfully binding the receive
-        socket is the only connection check available at startup.  Bitwig's
-        built-in OSC controller does not acknowledge ``/refresh`` requests,
-        so waiting for a response here makes a healthy setup time out.
+        The supported MCP path requires a responsive local Grid Bridge. Legacy
+        direct callers may still opt into connectionless OSC startup.
 
         Raises:
-            ConnectionError: If the local OSC receive socket cannot start.
+            GridBridgeError: If the configured Grid Bridge is unavailable.
+            ConnectionError: If the deprecated local OSC socket cannot start.
         """
+        if not self.osc_enabled:
+            if self.bridge is None:
+                raise GridBridgeError("Bitwig Grid bridge is not configured")
+            if not self.bridge.ping():
+                raise GridBridgeError(
+                    f"Bitwig Grid bridge is unavailable at "
+                    f"{self.bridge.host}:{self.bridge.port}"
+                )
+            self.bridge_available = True
+            self.ready = True
+            self.connected = True
+            self.connection_attempts = 0
+            self.error_handler.record_success()
+            logger.info(
+                "Bitwig Grid bridge controller ready at "
+                f"{self.bridge.host}:{self.bridge.port}"
+            )
+            return
+
         try:
             # Start the OSC server before sending the initial state request so
             # any unsolicited state messages are captured.
@@ -166,12 +191,12 @@ class BitwigOSCController:
             raise ConnectionError(details=str(e))
 
     def stop(self) -> None:
-        """Stop the controller"""
+        """Stop the configured transport."""
         self.ready = False
         self.connected = False
-        self.server.stop()
-        logger.info("OSC controller stopped")
-
+        if self.osc_enabled:
+            self.server.stop()
+        logger.info("Bitwig Grid bridge controller stopped")
     def __enter__(self) -> "BitwigOSCController":
         """Context manager entry"""
         self.start()
@@ -190,6 +215,9 @@ class BitwigOSCController:
         Returns:
             True if Bitwig is responding, False otherwise
         """
+        if not self.osc_enabled:
+            return self.bridge is not None and self.bridge.ping()
+
         try:
             # Clear all messages
             self.server.clear_messages()
@@ -509,10 +537,27 @@ class BitwigOSCController:
                     result["graph"] = bridge.graph_state()
                 return result
             except GridBridgeError as error:
-                logger.warning(
-                    "Bitwig Grid bridge read failed; falling back to OSC: %s", error
-                )
+                logger.warning("Bitwig Grid bridge read failed: %s", error)
                 self.bridge_available = False
+                if not self.osc_enabled:
+                    return {
+                        "available": False,
+                        "graph_available": False,
+                        "bridge": False,
+                        "properties": {},
+                        "parameters": [],
+                        "error": str(error),
+                    }
+
+        if not self.osc_enabled:
+            return {
+                "available": False,
+                "graph_available": False,
+                "bridge": False,
+                "properties": {},
+                "parameters": [],
+                "error": "Bitwig Grid bridge is unavailable",
+            }
 
         params = self.get_device_params()
         device_properties: Dict[str, Any] = {}
@@ -781,10 +826,15 @@ class BitwigOSCController:
                 self._require_bridge().set_parameters_atomic(parameters)
                 return list(parameters)
             except GridBridgeError as error:
+                self.bridge_available = False
+                if not self.osc_enabled:
+                    raise
                 logger.warning(
                     "Bitwig Grid bridge write failed; falling back to OSC: %s", error
                 )
-                self.bridge_available = False
+
+        if not self.osc_enabled:
+            raise GridBridgeError("Bitwig Grid bridge is unavailable")
 
         for index, value in parameters.items():
             self.client.set_device_parameter(index, value)

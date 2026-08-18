@@ -1,7 +1,8 @@
-"""
-Bitwig OSC Integration Package
+"""Deprecated OSC compatibility package.
 
-Provides OSC communication with Bitwig Studio
+The supported MCP runtime uses the local Bitwig Grid Bridge transport. These
+classes remain importable for legacy direct callers and are not started by
+default.
 """
 
 from .client import BitwigOSCClient

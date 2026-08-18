@@ -7,7 +7,7 @@ Snapshot revision **3** (sha256-fcb97ba6e2ec30de66c2366f48c7bb26d6379dd93ed1ce82
 - `docs/grid-device-inventory.json` is the machine-readable inventory, including every installed package, every captured graph instance, and per-parameter native ranges/options.
 - The bridge is authoritative at session time. Start with `get_grid_capabilities`, then read `get_grid_graph` when graph access is available.
 - Catalog package IDs are insertion identifiers. Instance IDs and coordinates belong only to the captured `polygrid_example` project and must be re-read before mutation.
-- If the bridge reports `graph_available: false`, do not infer modules, ports, cables, coordinates, or parameter metadata from OSC, UI state, or project-file bytes.
+- If the bridge reports `graph_available: false`, do not infer modules, ports, cables, coordinates, or parameter metadata from UI state, stale snapshots, or project-file bytes.
 
 ## Provenance and revision
 

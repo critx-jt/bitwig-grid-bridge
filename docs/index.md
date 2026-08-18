@@ -1,64 +1,67 @@
 # Bitwig Grid Bridge
 
-Bitwig Grid Bridge is a local Bitwig Studio extension and optional MCP adapter
-for inspectable, reversible automation. It connects agents to the selected
-device, exposed controls, and—when supported by the running extension—Grid
-module graphs.
+Bitwig Grid Bridge is a local Bitwig Studio extension for inspecting devices,
+shaping exposed controls, and working with supported Grid graphs. The site is
+written for producers: start with a working project, make one visible change,
+and keep an undo path.
 
-!!! tip "Start with the smallest path"
-    Use the extension and an example script first. Add the MCP adapter only
-    when an agent client needs it.
+## Start with a goal
 
-## What it does
-
-- Reads selected-device, container, track, and project-history state.
-- Controls exposed remote parameters in host-thread batches.
-- Navigates devices and invokes allowlisted Bitwig actions.
-- Inserts known Bitwig devices and Grid modules by runtime UUID.
-- Inspects Grid modules, ports, coordinates, connections, and parameters when
-  `graph_available` is true.
-- Provides semantic modulator search and host-modulator inspection.
-- Provides preview-first Grid shaping with revisions, confirmation, and undo.
-- Keeps the Java bridge loopback-only and the Python MCP adapter optional.
-
-## Choose a starting page
-
-| Need | Page |
+| You want to… | Start here |
 | --- | --- |
-| First successful connection | [Quickstart](quickstart.md) |
-| Install the extension, MCP adapter, or OSC fallback | [Installation](installation.md) |
-| Understand the data returned by tools | [Models and boundaries](models.md) |
-| Make a safe change | [Workflows](workflows.md) |
-| Look up tools, variables, and recovery | [Cheat sheet](cheatsheet.md) |
-| Reduce context switching and working-memory load | [Accessible use](accessibility.md) |
-| Understand threads, transports, and safety | [Architecture](architecture.md) |
-| Browse installed Grid packages | [Live Grid inventory](grid-device-inventory.md) |
-| Browse semantic modulation roles | [Grid modulator catalog](grid-modulator-catalog.md) |
+| Install the bridge | [Installation](installation.md) |
+| Make the first connection | [Quickstart](quickstart.md) |
+| Shape a sound from a brief | [Workflows](workflows.md#preview-first-shaping) |
+| Inspect or edit a Grid graph | [Graph workflow](workflows.md#inspecting-and-editing-a-grid-graph) |
+| Find a command quickly | [Cheat sheet](cheatsheet.md) |
+| Connect an MCP client | [Agent reference](agent/index.md) |
 
-## Five-minute verification
+## The working method
+
+Use the same short sequence for every live change:
+
+1. **Observe** the selected device and available capabilities.
+2. **Plan** one intended change and its expected result.
+3. **Preview** the change when a preview is available.
+4. **Apply** one confirmed mutation.
+5. **Verify** the new state in Bitwig.
+6. **Recover** with undo or a saved snapshot if the result is wrong.
+
+A read-only inspection is a complete stopping point. Save only when the result
+is intentional.
+
+## What the extension provides
+
+- Selected-device, container, track, and project-history inspection.
+- Eight exposed remote controls with atomic host-thread writes.
+- Device navigation, device insertion, and host undo/redo.
+- Grid module search, insertion, graph inspection, port connections, and
+  parameter writes when the running extension reports those capabilities.
+- Preview-first shaping sessions with styles, revisions, explicit confirmation,
+  and session undo.
+- A loopback-only local bridge at `127.0.0.1:8765`.
+
+The capability response is authoritative. If `graph_available` is false, use
+selected-device controls only. Do not infer graph modules, ports, coordinates,
+or connections from another project or from the interface.
+
+## Five-minute check
+
+From the repository root:
 
 ```bash
 mvn -f extension/pom.xml package
 cp extension/target/bitwig-grid-bridge-0.1.0.jar \
   "$HOME/Bitwig Studio/Extensions/BitwigGridBridge.bwextension"
-
-# After enabling the extension in Bitwig:
 python examples/automation/grid_bridge_demo.py inspect
 ```
 
-The extension listens on `127.0.0.1:8765` and claims no MIDI ports or external
-hardware. The optional MCP adapter uses stdio and prefers the bridge when
-`BITWIG_MCP_GRID_BRIDGE_ENABLED=true`.
+Run the command after enabling **Bitwig Grid Bridge** in **Settings →
+Controllers**. Use a copy of one of the projects in
+[Examples](https://github.com/critx-jt/bitwig-grid-bridge/tree/main/examples)
+while learning.
 
-## Safety boundary
+## Next step
 
-`get_grid_capabilities` is authoritative. If `graph_available` is false, do not
-invent module IDs, ports, cables, coordinates, or graph edits from OSC, pixels,
-or native project bytes. Read state before mutations, confirm live changes, and
-verify after them.
-
-## Examples and project fixtures
-
-The repository's [example projects and scripts](https://github.com/critx-jt/bitwig-grid-bridge/tree/main/examples)
-are throwaway fixtures. Use copies while learning; do not run experiments
-against an active music project.
+Choose one small action from [Workflows](workflows.md). Keep the project open,
+read the result, and stop before starting a second unrelated change.

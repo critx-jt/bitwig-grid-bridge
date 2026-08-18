@@ -1,7 +1,7 @@
 [project]
 name = "bitwig-grid-bridge"
 version = "0.1.0"
-description = "Companion MCP and OSC adapter for Bitwig Grid Bridge."
+description = "Companion MCP adapter for Bitwig Grid Bridge."
 authors = [{ name = "John Stanford", email = "787382+jxstanford@users.noreply.github.com" }]
 readme = "README.md"
 keywords = ['python']

@@ -1,6 +1,22 @@
 from unittest.mock import MagicMock, patch
 
 from bitwig_mcp_server.bridge import GridBridgeClient, GridBridgeError
+from bitwig_mcp_server.mcp.server import BitwigMCPServer
+from bitwig_mcp_server.settings import Settings
+
+
+def test_mcp_server_uses_bridge_only_by_default():
+    """Default MCP startup must not bind or send on legacy OSC ports."""
+    with (
+        patch("bitwig_mcp_server.mcp.server.MCPServer"),
+        patch(
+            "bitwig_mcp_server.mcp.server.BitwigOSCController"
+        ) as controller_class,
+    ):
+        BitwigMCPServer(Settings())
+
+    assert controller_class.call_args.kwargs["bridge_enabled"] is True
+    assert controller_class.call_args.kwargs["osc_enabled"] is False
 
 
 def test_bridge_client_state_request():

@@ -26,9 +26,10 @@ class Settings(BaseSettings):
         app_tagline (str): The application tagline/description.
         root_dir (Path): The root directory of the application.
         log_level (str): The logging level (e.g., ERROR, WARN, INFO, DEBUG).
-        bitwig_host (str): The hostname or IP address of the Bitwig Studio instance.
-        bitwig_send_port (int): The port to send OSC messages to Bitwig.
-        bitwig_receive_port (int): The port to receive OSC messages from Bitwig.
+        bitwig_host (str): Deprecated OSC compatibility host.
+        bitwig_send_port (int): Deprecated OSC compatibility send port.
+        bitwig_receive_port (int): Deprecated OSC compatibility receive port.
+        osc_enabled (bool): Enable the deprecated OSC compatibility transport.
         mcp_port (int): The port for the MCP server's HTTP/SSE transport.
     """
 
@@ -42,18 +43,22 @@ class Settings(BaseSettings):
     )
     log_level: str = Field(default="INFO", description="The logging level.")
 
-    # Bitwig settings
+    # Deprecated OSC compatibility settings. The MCP adapter does not enable
+    # this transport unless explicitly requested.
     bitwig_host: str = Field(
-        default="127.0.0.1", description="Bitwig Studio host address"
+        default="127.0.0.1", description="Deprecated OSC compatibility host"
     )
     bitwig_send_port: int = Field(
-        default=8000, description="Port to send OSC messages to Bitwig"
+        default=8000, description="Deprecated OSC compatibility send port"
     )
     bitwig_receive_port: int = Field(
-        default=9000, description="Port to receive OSC messages from Bitwig"
+        default=9000, description="Deprecated OSC compatibility receive port"
+    )
+    osc_enabled: bool = Field(
+        default=False, description="Enable deprecated OSC compatibility transport"
     )
     grid_bridge_enabled: bool = Field(
-        default=True, description="Prefer the standalone Bitwig Grid bridge when available"
+        default=True, description="Use the standalone Bitwig Grid bridge"
     )
     grid_bridge_host: str = Field(
         default="127.0.0.1", description="Standalone Bitwig Grid bridge host"

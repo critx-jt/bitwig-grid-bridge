@@ -52,6 +52,22 @@ class TestBitwigOSCController(unittest.TestCase):
 
         self.controller.stop()
 
+    def test_bridge_only_start_does_not_start_osc(self):
+        """The supported MCP path starts only the local Grid Bridge transport."""
+        self.controller.osc_enabled = False
+        self.controller.bridge = MagicMock()
+        self.controller.bridge.ping.return_value = True
+
+        self.controller.start()
+
+        self.controller.bridge.ping.assert_called_once_with()
+        self.mock_server.start.assert_not_called()
+        self.mock_client.refresh.assert_not_called()
+        self.assertTrue(self.controller.ready)
+
+        self.controller.stop()
+        self.mock_server.stop.assert_not_called()
+
     def test_parameter_snapshots_compare_and_apply(self):
         """Snapshots compare values and apply only stored parameters."""
         self.controller.refresh = MagicMock(return_value=True)

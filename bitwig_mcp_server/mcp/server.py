@@ -43,6 +43,7 @@ class BitwigMCPServer:
             bridge_enabled=self.settings.grid_bridge_enabled,
             bridge_host=self.settings.grid_bridge_host,
             bridge_port=self.settings.grid_bridge_port,
+            osc_enabled=self.settings.osc_enabled,
         )
 
         # Set up handlers
@@ -56,19 +57,11 @@ class BitwigMCPServer:
     async def start(self) -> None:
         """Start the Bitwig MCP server"""
         try:
-            # Start the OSC controller
             self.controller.start()
 
-            # Wait for controller to be ready
-            wait_count = 0
-            max_wait_count = 50  # 5 seconds
-            while not self.controller.ready and wait_count < max_wait_count:
-                await asyncio.sleep(0.1)
-                wait_count += 1
-
             if not self.controller.ready:
-                logger.error("Bitwig OSC controller failed to become ready in time")
-                raise RuntimeError("Bitwig OSC controller failed to initialize")
+                logger.error("Bitwig Grid Bridge controller failed to become ready")
+                raise RuntimeError("Bitwig Grid Bridge controller failed to initialize")
 
             logger.info(f"Bitwig Grid Bridge MCP started - hosting {self.settings.app_name}")
         except Exception as e:

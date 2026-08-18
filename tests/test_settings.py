@@ -24,6 +24,7 @@ def test_settings_defaults():
     assert settings.bitwig_host == "127.0.0.1"
     assert settings.bitwig_send_port == 8000
     assert settings.bitwig_receive_port == 9000
+    assert settings.osc_enabled is False
     assert settings.mcp_port == 8080
 
 
